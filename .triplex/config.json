@@ -1,0 +1,11 @@
+{
+  "$schema": "https://triplex.dev/config.schema.json",
+  "files": ["./src/**/*.{ts,tsx}"],
+  "assetsDir": "./public",
+  "publicDir": "./public",
+  "components": [
+    "./src/scenes/**/*.tsx",
+    "./src/components/3d/**/*.tsx",
+    "./src/constants/scenes/*ts"
+  ]
+}

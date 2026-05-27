@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk grep *)",
+      "Bash(curl -sf http://localhost:3000)",
+      "Bash(Get-ChildItem -Path \"j:\\\\projects\\\\fh-portfolio\\\\fh-portfolio\\\\public\" -Recurse -Filter \"*.png\" -o \"*.jpg\" -o \"*.jpeg\" -o \"*.svg\" -o \"*.gif\" -o \"*.webp\")",
+      "Bash(Select-Object FullName)",
+      "Read(//j/projects/fh-portfolio/portfolio-inner-site/**)",
+      "Bash(rtk find *)",
+      "Bash(cp j:/projects/fh-portfolio/portfolio-inner-site/public/doom.jsdos j:/projects/fh-portfolio/fh-portfolio/public/doom.jsdos)",
+      "Bash(cp -r j:/projects/fh-portfolio/portfolio-inner-site/public/js-dos j:/projects/fh-portfolio/fh-portfolio/public/js-dos)"
+    ]
+  }
+}

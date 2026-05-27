@@ -1,0 +1,129 @@
+import { Html } from "@react-three/drei";
+import { forwardRef, useImperativeHandle, useRef } from "react";
+import * as THREE from "three";
+import { SCENE_CONFIG } from "../../constants/scene";
+import { LaptopOS } from "../laptop-os/LaptopOS";
+
+const { LAPTOP_SCREEN } = SCENE_CONFIG;
+
+export interface LaptopScreenHandle {
+  /** World-space position of the screen's center. */
+  getWorldPosition: () => THREE.Vector3 | null;
+  /** World-space outward normal of the screen face (unit vector). */
+  getWorldNormal: () => THREE.Vector3 | null;
+}
+
+interface LaptopScreenProps {
+  isActive: boolean;
+  onHoverChange: (hovered: boolean) => void;
+  onActivate: () => void;
+}
+
+// drei's <Html transform> applies a hidden 1/40 factor to the matrix's scale
+// components in CSS pixel space (see getObjectCSSMatrix with default
+// distanceFactor = 10 → factor = 1/((10/400)) = 40). So to make a
+// PIXEL_WIDTH × PIXEL_HEIGHT DOM element occupy WIDTH × HEIGHT world units,
+// we need scale = (WIDTH * 40) / PIXEL_WIDTH per axis.
+const DREI_HTML_PIXEL_FACTOR = 40;
+const HTML_SCALE: [number, number, number] = [
+  (LAPTOP_SCREEN.WIDTH * DREI_HTML_PIXEL_FACTOR) / LAPTOP_SCREEN.PIXEL_WIDTH,
+  (LAPTOP_SCREEN.HEIGHT * DREI_HTML_PIXEL_FACTOR) / LAPTOP_SCREEN.PIXEL_HEIGHT,
+  1,
+];
+
+export const LaptopScreen = forwardRef<LaptopScreenHandle, LaptopScreenProps>(
+  function LaptopScreen({ isActive, onHoverChange, onActivate }, ref) {
+    const groupRef = useRef<THREE.Group>(null);
+
+    useImperativeHandle(ref, () => ({
+      getWorldPosition: () => {
+        if (!groupRef.current) return null;
+        return groupRef.current.getWorldPosition(new THREE.Vector3());
+      },
+      getWorldNormal: () => {
+        if (!groupRef.current) return null;
+        const n = new THREE.Vector3(0, 0, 1);
+        n.applyQuaternion(groupRef.current.getWorldQuaternion(new THREE.Quaternion()));
+        return n.normalize();
+      },
+    }));
+
+    const handlePointerOver = (e: any) => {
+      e.stopPropagation();
+      if (isActive) return;
+      onHoverChange(true);
+      document.body.style.cursor = "pointer";
+    };
+
+    const handlePointerOut = (e: any) => {
+      e.stopPropagation();
+      if (isActive) return;
+      onHoverChange(false);
+      document.body.style.cursor = "";
+    };
+
+    const handleClick = (e: any) => {
+      e.stopPropagation();
+      if (isActive) return;
+      onActivate();
+    };
+
+    return (
+      <group
+        ref={groupRef}
+        position={LAPTOP_SCREEN.POSITION}
+        rotation={LAPTOP_SCREEN.ROTATION}
+      >
+        {/* Hit area for hover/click — invisible (or debug-colored) plane.
+            Only present before zoom-in; once active, the DOM handles its
+            own pointer events. */}
+        {!isActive && (
+          <mesh
+            onPointerOver={handlePointerOver}
+            onPointerOut={handlePointerOut}
+            onClick={handleClick}
+          >
+            <planeGeometry args={[LAPTOP_SCREEN.WIDTH, LAPTOP_SCREEN.HEIGHT]} />
+            <meshBasicMaterial
+              color={
+                LAPTOP_SCREEN.DEBUG_VISIBLE_BACKPLATE
+                  ? LAPTOP_SCREEN.DEBUG_BACKPLATE_COLOR
+                  : "#000000"
+              }
+              transparent
+              opacity={LAPTOP_SCREEN.DEBUG_VISIBLE_BACKPLATE ? 0.5 : 0}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+        )}
+
+        {/* The actual DOM screen content. `transform` mounts it in 3D space
+            via CSS3D. We deliberately do NOT enable `occlude` here — drei's
+            occlusion raycasts the whole scene and trivially hides the Html
+            behind the macbook lid mesh, even when intentionally co-planar.
+            A tiny forward Z offset (0.005) keeps it visually in front. */}
+        <Html
+          transform
+          position={[0, 0, 0.005]}
+          scale={HTML_SCALE}
+          // `pointerEvents` is drei's own prop — it controls the wrapper
+          // that actually catches DOM events. Setting it on `style` only
+          // affects the innermost child, leaving the wrapper to swallow
+          // clicks before they ever reach the 3D hit-area mesh below.
+          pointerEvents={isActive ? "auto" : "none"}
+          // Cap the portal'd DOM's z-index well below the loading overlay
+          // (z=10000). Drei defaults to ~16.7M, which leaks through any
+          // sibling overlay — including the intro loader.
+          zIndexRange={[100, 0]}
+          style={{
+            width: `${LAPTOP_SCREEN.PIXEL_WIDTH}px`,
+            height: `${LAPTOP_SCREEN.PIXEL_HEIGHT}px`,
+          }}
+        >
+          <LaptopOS isActive={isActive} />
+        </Html>
+      </group>
+    );
+  }
+);
