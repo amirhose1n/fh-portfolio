@@ -1,5 +1,5 @@
 import { useLoader } from "@react-three/fiber";
-import { useRef } from "react";
+import { forwardRef, useRef } from "react";
 import * as THREE from "three";
 import { SCENE_CONFIG } from "../../../constants/scene";
 
@@ -7,7 +7,11 @@ const { SIZE, HALF, FLOOR_Y, CEILING_Y, CENTER_Y, WALL_INSET, WALL_THICKNESS } =
   SCENE_CONFIG.ROOM;
 const WINDOW = SCENE_CONFIG.WINDOW;
 
-export function Ground() {
+// Forwarded ref points at the top-level group that owns every wall, floor,
+// and ceiling mesh. <Html occlude={[ref]}> raycasts recursively against this
+// subtree so the laptop screen vanishes when a wall sits between camera and
+// screen — without false-positives from the macbook lid (not under here).
+export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
   const groundRef = useRef<THREE.Mesh>(null);
 
   // Black painted MDF planks — diffuse-only (no normal / metalness /
@@ -97,7 +101,7 @@ export function Ground() {
   const setLayer1 = (self: THREE.Object3D) => self.layers.set(1);
 
   return (
-    <group>
+    <group ref={ref}>
       {/* ── INTERIOR (layer 0, unchanged textures) ───────────────── */}
 
       {/* Black painted MDF plank floor (interior, visible from above) */}
@@ -446,4 +450,4 @@ export function Ground() {
       })()}
     </group>
   );
-}
+});

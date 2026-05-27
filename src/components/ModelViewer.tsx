@@ -4,8 +4,10 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { SCENE_CONFIG } from "../constants/scene";
 import { useCameraAnimation } from "../hooks/useCameraAnimation";
+import { AudioCtx, useAudio } from "../hooks/useAudio";
+import { RESUME_PDF } from "./laptop-os/icons";
 import type { Area } from "../types/3d";
-import { Gallery, Ground, LaptopScreen, Model, Window } from "./3d";
+import { Gallery, Ground, LaptopScreen, Model, SpeakerAudio, Window } from "./3d";
 import type { GalleryHandle } from "./3d/Gallery";
 import type { LaptopScreenHandle } from "./3d/LaptopScreen";
 
@@ -18,11 +20,8 @@ const {
   GALLERY,
   MODELS,
   ANIMATION,
-  ROOM,
   LAPTOP_SCREEN,
 } = SCENE_CONFIG;
-
-const ROOM_CENTER: [number, number, number] = [0, ROOM.CENTER_Y, 0];
 
 // Intro flythrough — camera starts very far away on the same sight-line as
 // Overview and dollies straight in. Strong ease-out so it visibly slows down
@@ -153,6 +152,14 @@ export default function ModelViewer() {
   const controlsRef = useRef<any>(null);
   const galleryRef = useRef<GalleryHandle>(null);
   const laptopScreenRef = useRef<LaptopScreenHandle>(null);
+  // Occluder refs for the laptop's CSS3D layer. Anything that should block
+  // the screen when between camera and screen goes here. The macbook is
+  // deliberately excluded — its lid is nearly co-planar with the screen and
+  // would false-positive every frame.
+  const groundRef = useRef<THREE.Group>(null);
+  const deskRef = useRef<THREE.Group>(null);
+  const chairRef = useRef<THREE.Group>(null);
+  const avatarRef = useRef<THREE.Group>(null);
 
   const [currentArea, setCurrentArea] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -161,6 +168,8 @@ export default function ModelViewer() {
   );
   const [freeMode, setFreeMode] = useState(false);
   const { progress, active } = useProgress();
+  const audioCtx = useAudio();
+  const { isOn: audioOn, toggle: toggleAudio, turnOn: turnAudioOn } = audioCtx;
 
   const { animate: animateCamera, cancel: cancelAnimation } =
     useCameraAnimation();
@@ -428,6 +437,15 @@ export default function ModelViewer() {
     return () => window.clearTimeout(fadeTimer);
   }, [introPhase, progress, active, animateCamera]);
 
+  // SpeakerAudio is mounted from the start so the audio file loads as part
+  // of the initial LoadingOverlay — the user enters the room with music
+  // ready to go. The component handles its own user-gesture unlock when
+  // the AudioContext is suspended.
+  useEffect(() => {
+    if (introPhase !== "ready") return;
+    turnAudioOn();
+  }, [introPhase, turnAudioOn]);
+
   // Handle wheel and keyboard navigation
   useEffect(() => {
     if (DEBUG.ENABLED) return;
@@ -499,12 +517,20 @@ export default function ModelViewer() {
       <Canvas
         camera={{ position: INTRO_START_POSITION, fov: CAMERA.FOV }}
         style={{ background: CAMERA.BACKGROUND_COLOR }}
-        onCreated={({ camera }) => {
+        onCreated={({ camera, raycaster }) => {
           cameraRef.current = camera;
           // Camera renders every layer (so layer-1 rooftop objects stay visible)
           camera.layers.enableAll();
+          // The shared raycaster defaults to layer-0 only. Enable all layers
+          // so drei's <Html occlude> can hit the layer-1 exterior walls —
+          // otherwise the laptop screen renders through them when looking
+          // at the room from outside.
+          raycaster.layers.enableAll();
         }}
       >
+        {/* Bridge the audio context across the r3f reconciler boundary so
+            LaptopOS (mounted via drei's <Html> portal) can read useAudio. */}
+        <AudioCtx.Provider value={audioCtx}>
         {/* Night sky */}
         <Stars
           radius={50}
@@ -596,7 +622,7 @@ export default function ModelViewer() {
         )}
 
         <Suspense fallback={null}>
-          <Ground />
+          <Ground ref={groundRef} />
           <Window />
           <Gallery
             ref={galleryRef}
@@ -667,6 +693,7 @@ export default function ModelViewer() {
 
           {/* FH Model */}
           <Model
+            ref={avatarRef}
             url={MODELS.FH.URL}
             position={AREAS.OVERVIEW.componentPosition}
             rotation={MODELS.FH.ROTATION}
@@ -707,10 +734,15 @@ export default function ModelViewer() {
                 scale={MODELS.COMPUTER.SCALE}
               />
 
-              {/* Interactive DOM "screen" overlaid on the macbook display */}
+              {/* Interactive DOM "screen" overlaid on the macbook display.
+                  `occluders` passes the walls/floor/ceiling group so the
+                  CSS3D layer disappears when a wall sits between camera
+                  and screen — without false-positives from the macbook lid
+                  (which lives outside the Ground subtree). */}
               <LaptopScreen
                 ref={laptopScreenRef}
                 isActive={laptopActive}
+                occluders={[groundRef]}
                 onHoverChange={handleLaptopHover}
                 onActivate={handleLaptopActivate}
               />
@@ -718,6 +750,7 @@ export default function ModelViewer() {
 
             {/* Desk Model */}
             <Model
+              ref={deskRef}
               scale={MODELS.DESK.SCALE}
               position={MODELS.DESK.POSITION}
               url={MODELS.DESK.URL}
@@ -725,19 +758,33 @@ export default function ModelViewer() {
 
             {/* Chair — in front of the desk */}
             <Model
+              ref={chairRef}
               url={MODELS.CHAIR.URL}
               position={MODELS.CHAIR.POSITION}
               rotation={MODELS.CHAIR.ROTATION}
               scale={MODELS.CHAIR.SCALE}
             />
 
-            {/* Speaker — sits on the desk */}
-            <Model
-              url={MODELS.SPEAKER.URL}
+            {/* Speaker — sits on the desk. Wrapped in a group so the
+                PositionalAudio shares its world position but isn't scaled by
+                the speaker's tiny 0.0005 (which would shrink the audio
+                rolloff to nothing). The audio loader is isolated in its
+                own Suspense so the multi-MB mp3 download doesn't black out
+                the rest of the room while it streams. */}
+            <group
               position={MODELS.SPEAKER.POSITION}
               rotation={MODELS.SPEAKER.ROTATION}
-              scale={MODELS.SPEAKER.SCALE}
-            />
+            >
+              <Model
+                url={MODELS.SPEAKER.URL}
+                scale={MODELS.SPEAKER.SCALE}
+              />
+              <SpeakerAudio
+                url={MODELS.SPEAKER.AUDIO.URL}
+                distance={MODELS.SPEAKER.AUDIO.DISTANCE}
+                volume={MODELS.SPEAKER.AUDIO.VOLUME}
+              />
+            </group>
           </group>
         </Suspense>
 
@@ -761,70 +808,132 @@ export default function ModelViewer() {
           }
           target={areas[0].target}
         />
+        </AudioCtx.Provider>
       </Canvas>
 
-      {/* Free-mode toggle (top-left) */}
-      <button
-        type="button"
-        onClick={() => {
-          setFreeMode((wasFree) => {
-            const enteringFree = !wasFree;
-            // When entering free mode, pivot the camera around the room
-            // center instead of whatever it was previously locked onto.
-            // Camera position stays put — only the orbit target moves.
-            // Skipped in DEBUG mode: a developer toggling the button shouldn't
-            // have their carefully-positioned orbit target snapped to center.
-            if (
-              enteringFree &&
-              !DEBUG.ENABLED &&
-              cameraRef.current &&
-              controlsRef.current
-            ) {
-              cancelAnimation();
-              const currentPos = cameraRef.current.position.toArray() as [
-                number,
-                number,
-                number,
-              ];
-              animateCamera(
-                { camera: cameraRef.current, controls: controlsRef.current },
-                currentPos,
-                ROOM_CENTER,
-                {
-                  duration: ANIMATION.GALLERY_ZOOM_DURATION,
-                  easingPower: ANIMATION.EASING_POWER,
-                },
-              );
-            }
-            return enteringFree;
-          });
-        }}
+      {/* Top-left control row: Resume / Audio / Free Mode */}
+      <div
         style={{
           position: "absolute",
           top: "20px",
           left: "20px",
           zIndex: 1000,
-          color: "white",
-          fontSize: "12px",
-          letterSpacing: "0.15em",
-          fontWeight: 500,
-          background: freeMode
-            ? "rgba(184, 200, 224, 0.18)"
-            : "rgba(0, 0, 0, 0.5)",
-          border: freeMode
-            ? "1px solid rgba(184, 200, 224, 0.6)"
-            : "1px solid rgba(255, 255, 255, 0.15)",
-          padding: "8px 14px",
-          borderRadius: "16px",
-          backdropFilter: "blur(10px)",
-          cursor: "pointer",
+          display: "flex",
+          gap: "10px",
           opacity: introPhase === "ready" ? 1 : 0,
           pointerEvents: introPhase === "ready" ? "auto" : "none",
-          transition: "opacity 500ms ease-in, background 200ms, border 200ms",
+          transition: "opacity 500ms ease-in",
         }}
       >
-        {freeMode ? "EXIT FREE MODE" : "FREE MODE"}
-      </button>
+        <a
+          href={RESUME_PDF}
+          download
+          style={{
+            color: "white",
+            fontSize: "12px",
+            letterSpacing: "0.15em",
+            fontWeight: 500,
+            background: "rgba(0, 0, 0, 0.5)",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            padding: "8px 14px",
+            borderRadius: "16px",
+            backdropFilter: "blur(10px)",
+            cursor: "pointer",
+            textDecoration: "none",
+            transition: "background 200ms, border 200ms",
+          }}
+        >
+          RESUME
+        </a>
+
+        <button
+          type="button"
+          onClick={toggleAudio}
+          aria-label={audioOn ? "Mute audio" : "Unmute audio"}
+          style={{
+            all: "unset",
+            color: "white",
+            fontSize: "14px",
+            letterSpacing: "0.15em",
+            fontWeight: 500,
+            background: audioOn
+              ? "rgba(184, 200, 224, 0.18)"
+              : "rgba(0, 0, 0, 0.5)",
+            border: audioOn
+              ? "1px solid rgba(184, 200, 224, 0.6)"
+              : "1px solid rgba(255, 255, 255, 0.15)",
+            padding: "8px 14px",
+            borderRadius: "16px",
+            backdropFilter: "blur(10px)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            boxSizing: "border-box",
+            transition: "background 200ms, border 200ms",
+          }}
+        >
+          <span style={{ fontSize: "14px", lineHeight: 1 }}>
+            {audioOn ? "🔊" : "🔇"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            // Exiting free mode is instant — the user is already wherever
+            // they panned to, and snapping back would feel jarring.
+            if (freeMode) {
+              setFreeMode(false);
+              return;
+            }
+            // Entering free mode: relax the camera into the Overview pose
+            // first, then unlock OrbitControls once we've landed. Skipped in
+            // DEBUG mode so a developer toggling the button doesn't lose
+            // their carefully-positioned camera.
+            if (DEBUG.ENABLED || !cameraRef.current || !controlsRef.current) {
+              setFreeMode(true);
+              return;
+            }
+            cancelAnimation();
+            setIsTransitioning(true);
+            setCurrentArea(0);
+            animateCamera(
+              { camera: cameraRef.current, controls: controlsRef.current },
+              AREAS.OVERVIEW.position,
+              AREAS.OVERVIEW.target,
+              {
+                duration: ANIMATION.AREA_TRANSITION_DURATION,
+                easingPower: ANIMATION.EASING_POWER,
+                onComplete: () => {
+                  setIsTransitioning(false);
+                  setFreeMode(true);
+                },
+              },
+            );
+          }}
+          style={{
+            all: "unset",
+            color: "white",
+            fontSize: "12px",
+            letterSpacing: "0.15em",
+            fontWeight: 500,
+            background: freeMode
+              ? "rgba(184, 200, 224, 0.18)"
+              : "rgba(0, 0, 0, 0.5)",
+            border: freeMode
+              ? "1px solid rgba(184, 200, 224, 0.6)"
+              : "1px solid rgba(255, 255, 255, 0.15)",
+            padding: "8px 14px",
+            borderRadius: "16px",
+            backdropFilter: "blur(10px)",
+            cursor: "pointer",
+            transition: "background 200ms, border 200ms",
+          }}
+        >
+          {freeMode ? "EXIT FREE MODE" : "FREE MODE"}
+        </button>
+      </div>
 
       {/* Area indicator (hidden during free mode) */}
       <div
@@ -838,15 +947,82 @@ export default function ModelViewer() {
           fontWeight: "500",
           zIndex: 1000,
           background: "rgba(0, 0, 0, 0.5)",
-          padding: "10px 20px",
+          padding: "8px 8px",
           borderRadius: "20px",
           backdropFilter: "blur(10px)",
           opacity: introPhase === "ready" && !freeMode ? 1 : 0,
           transition: "opacity 500ms ease-in",
           pointerEvents: introPhase === "ready" && !freeMode ? "auto" : "none",
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
         }}
       >
-        {areas[currentArea].name} ({currentArea + 1}/{areas.length})
+        <button
+          type="button"
+          aria-label="Previous area"
+          onClick={() =>
+            moveToArea(nextAreaIndex(currentArea, -1, areas.length))
+          }
+          disabled={isTransitioning}
+          style={{
+            all: "unset",
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: isTransitioning ? "default" : "pointer",
+            opacity: isTransitioning ? 0.4 : 1,
+            transition: "background 120ms, opacity 200ms",
+            fontSize: 18,
+            lineHeight: 1,
+          }}
+          onMouseEnter={(e) => {
+            if (!isTransitioning)
+              e.currentTarget.style.background = "rgba(255,255,255,0.12)";
+          }}
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.background = "transparent")
+          }
+        >
+          ‹
+        </button>
+        <span style={{ padding: "0 12px" }}>
+          {areas[currentArea].name} ({currentArea + 1}/{areas.length})
+        </span>
+        <button
+          type="button"
+          aria-label="Next area"
+          onClick={() =>
+            moveToArea(nextAreaIndex(currentArea, 1, areas.length))
+          }
+          disabled={isTransitioning}
+          style={{
+            all: "unset",
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: isTransitioning ? "default" : "pointer",
+            opacity: isTransitioning ? 0.4 : 1,
+            transition: "background 120ms, opacity 200ms",
+            fontSize: 18,
+            lineHeight: 1,
+          }}
+          onMouseEnter={(e) => {
+            if (!isTransitioning)
+              e.currentTarget.style.background = "rgba(255,255,255,0.12)";
+          }}
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.background = "transparent")
+          }
+        >
+          ›
+        </button>
       </div>
     </div>
   );

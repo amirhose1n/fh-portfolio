@@ -8,7 +8,8 @@
       "Read(//j/projects/fh-portfolio/portfolio-inner-site/**)",
       "Bash(rtk find *)",
       "Bash(cp j:/projects/fh-portfolio/portfolio-inner-site/public/doom.jsdos j:/projects/fh-portfolio/fh-portfolio/public/doom.jsdos)",
-      "Bash(cp -r j:/projects/fh-portfolio/portfolio-inner-site/public/js-dos j:/projects/fh-portfolio/fh-portfolio/public/js-dos)"
+      "Bash(cp -r j:/projects/fh-portfolio/portfolio-inner-site/public/js-dos j:/projects/fh-portfolio/fh-portfolio/public/js-dos)",
+      "Bash(rtk tsc *)"
     ]
   }
 }

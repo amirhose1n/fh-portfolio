@@ -1,7 +1,8 @@
 import { Html } from "@react-three/drei";
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { SCENE_CONFIG } from "../../constants/scene";
+import { AudioCtx, useAudio } from "../../hooks/useAudio";
 import { LaptopOS } from "../laptop-os/LaptopOS";
 
 const { LAPTOP_SCREEN } = SCENE_CONFIG;
@@ -15,6 +16,10 @@ export interface LaptopScreenHandle {
 
 interface LaptopScreenProps {
   isActive: boolean;
+  /** Refs to objects that should block the laptop's CSS3D html via a
+   *  raycast — typically the room walls/ceiling so the screen vanishes when
+   *  a wall sits between camera and screen. drei recurses into each ref. */
+  occluders?: RefObject<THREE.Object3D | null>[];
   onHoverChange: (hovered: boolean) => void;
   onActivate: () => void;
 }
@@ -32,8 +37,17 @@ const HTML_SCALE: [number, number, number] = [
 ];
 
 export const LaptopScreen = forwardRef<LaptopScreenHandle, LaptopScreenProps>(
-  function LaptopScreen({ isActive, onHoverChange, onActivate }, ref) {
+  function LaptopScreen(
+    { isActive, occluders, onHoverChange, onActivate },
+    ref,
+  ) {
     const groupRef = useRef<THREE.Group>(null);
+    // drei's <Html> mounts its children via ReactDOM.createRoot — a new,
+    // isolated React tree that doesn't inherit any context from outside.
+    // We read the audio context here (we're inside the Canvas tree where
+    // ModelViewer's AudioCtx bridge is visible) and re-provide it as part
+    // of the JSX passed to <Html> so LaptopOS can read useAudio().
+    const audio = useAudio();
 
     useImperativeHandle(ref, () => ({
       getWorldPosition: () => {
@@ -99,12 +113,22 @@ export const LaptopScreen = forwardRef<LaptopScreenHandle, LaptopScreenProps>(
         )}
 
         {/* The actual DOM screen content. `transform` mounts it in 3D space
-            via CSS3D. We deliberately do NOT enable `occlude` here — drei's
-            occlusion raycasts the whole scene and trivially hides the Html
-            behind the macbook lid mesh, even when intentionally co-planar.
-            A tiny forward Z offset (0.005) keeps it visually in front. */}
+            via CSS3D. `occlude` raycasts against the provided refs and
+            hides the html when something blocks the line of sight — we
+            pass the room walls so the screen disappears behind a wall but
+            stays visible from any in-room angle (and through the open
+            back of the room from Overview). A tiny forward Z offset
+            (0.005) keeps it visually in front of the macbook lid. */}
         <Html
           transform
+          // drei's <Html> types insist on a non-null ref shape, but React's
+          // RefObject is `T | null`. The runtime only reads `.current` so
+          // the cast is safe.
+          occlude={
+            occluders as
+              | RefObject<THREE.Object3D>[]
+              | undefined
+          }
           position={[0, 0, 0.005]}
           scale={HTML_SCALE}
           // `pointerEvents` is drei's own prop — it controls the wrapper
@@ -121,9 +145,11 @@ export const LaptopScreen = forwardRef<LaptopScreenHandle, LaptopScreenProps>(
             height: `${LAPTOP_SCREEN.PIXEL_HEIGHT}px`,
           }}
         >
-          <LaptopOS isActive={isActive} />
+          <AudioCtx.Provider value={audio}>
+            <LaptopOS isActive={isActive} />
+          </AudioCtx.Provider>
         </Html>
       </group>
     );
-  }
+  },
 );

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useAudio } from "../../hooks/useAudio";
 import { AppWindow } from "./AppWindow";
 import { DesktopIcon } from "./DesktopIcon";
+import { MusicMiniPlayer } from "./MusicMiniPlayer";
 import { Taskbar } from "./Taskbar";
 import { VSCodeApp } from "./apps/VSCodeApp";
 import { PdfViewerApp } from "./apps/PdfViewerApp";
@@ -16,17 +18,25 @@ const APPS: Record<AppId, AppMeta> = {
   vscode: { id: "vscode", name: "vscode.ts — Visual Studio Code", icon: ICONS.vscode },
   pdf: { id: "pdf", name: "amirhosein-farhoodi.pdf", icon: ICONS.pdf },
   doom: { id: "doom", name: "DOOM", icon: ICONS.doom },
+  music: { id: "music", name: "interstellar.mp3", icon: ICONS.music },
 };
 
 const DESKTOP_ICONS: Array<{ id: AppId; label: string }> = [
   { id: "vscode", label: "VS Code" },
   { id: "pdf", label: "Resume.pdf" },
   { id: "doom", label: "DOOM" },
+  { id: "music", label: "interstellar.mp3" },
 ];
+
+// Music has no window — double-clicking it just toggles audio on, which makes
+// the mini-player visible. Listed here so the existing app-window switch
+// doesn't need a `music` case.
+const WINDOWLESS_APPS = new Set<AppId>(["music"]);
 
 export function LaptopOS({ isActive }: LaptopOSProps) {
   const [openApp, setOpenApp] = useState<AppId | null>(null);
   const [selectedIcon, setSelectedIcon] = useState<AppId | null>(null);
+  const { isOn: audioOn, turnOn: turnAudioOn } = useAudio();
 
   // While a window is open, Esc closes the window instead of exiting the
   // laptop. Use capture phase + stopPropagation so the global ModelViewer
@@ -102,15 +112,19 @@ export function LaptopOS({ isActive }: LaptopOSProps) {
             selected={selectedIcon === id}
             onClick={() => setSelectedIcon(id)}
             onOpen={() => {
-              setOpenApp(id);
               setSelectedIcon(id);
+              if (WINDOWLESS_APPS.has(id)) {
+                if (id === "music") turnAudioOn();
+                return;
+              }
+              setOpenApp(id);
             }}
           />
         ))}
       </div>
 
       {/* Open app window */}
-      {activeAppMeta && (
+      {activeAppMeta && openApp && !WINDOWLESS_APPS.has(openApp) && (
         <AppWindow
           icon={activeAppMeta.icon}
           title={activeAppMeta.name}
@@ -120,6 +134,16 @@ export function LaptopOS({ isActive }: LaptopOSProps) {
           {openApp === "pdf" && <PdfViewerApp />}
           {openApp === "doom" && <DoomApp />}
         </AppWindow>
+      )}
+
+      {/* Music mini-player — sits top-right whenever audio is on. Stays in
+          sync with the global audio state (toggling here pauses the speaker,
+          and the top-bar AUDIO button toggles this player's visibility). */}
+      {audioOn && (
+        <MusicMiniPlayer
+          trackTitle="Interstellar"
+          trackArtist="Hans Zimmer"
+        />
       )}
 
       {/* Taskbar */}

@@ -192,7 +192,7 @@ export const SCENE_CONFIG = {
     },
     SKATEBOARD: {
       URL: "/Models/Skateboard/Skateboard.glb",
-      POSITION: [-1.3, -0.55, 1.2] as [number, number, number],
+      POSITION: [-1.3, -0.59, 1.2] as [number, number, number],
       ROTATION: [5.2, 6.1, 2.8] as [number, number, number],
       SCALE: [1, 1, 1] as [number, number, number],
     },
@@ -227,6 +227,12 @@ export const SCENE_CONFIG = {
       POSITION: [-0.5, 0.81, -0.1] as [number, number, number],
       ROTATION: [0, 0.4, 0] as [number, number, number],
       SCALE: 0.0005,
+      AUDIO: {
+        URL: "/musics/interstllar.mp3",
+        // Inverse distance model — full volume near desk, falls off in other areas.
+        DISTANCE: 0.5,
+        VOLUME: 1.0,
+      },
     },
     STARLINK: {
       URL: "/Models/Starlink/starlink.glb",
