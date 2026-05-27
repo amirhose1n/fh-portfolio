@@ -152,14 +152,6 @@ export default function ModelViewer() {
   const controlsRef = useRef<any>(null);
   const galleryRef = useRef<GalleryHandle>(null);
   const laptopScreenRef = useRef<LaptopScreenHandle>(null);
-  // Occluder refs for the laptop's CSS3D layer. Anything that should block
-  // the screen when between camera and screen goes here. The macbook is
-  // deliberately excluded — its lid is nearly co-planar with the screen and
-  // would false-positive every frame.
-  const groundRef = useRef<THREE.Group>(null);
-  const deskRef = useRef<THREE.Group>(null);
-  const chairRef = useRef<THREE.Group>(null);
-  const avatarRef = useRef<THREE.Group>(null);
 
   const [currentArea, setCurrentArea] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -622,7 +614,7 @@ export default function ModelViewer() {
         )}
 
         <Suspense fallback={null}>
-          <Ground ref={groundRef} />
+          <Ground />
           <Window />
           <Gallery
             ref={galleryRef}
@@ -693,7 +685,6 @@ export default function ModelViewer() {
 
           {/* FH Model */}
           <Model
-            ref={avatarRef}
             url={MODELS.FH.URL}
             position={AREAS.OVERVIEW.componentPosition}
             rotation={MODELS.FH.ROTATION}
@@ -734,15 +725,10 @@ export default function ModelViewer() {
                 scale={MODELS.COMPUTER.SCALE}
               />
 
-              {/* Interactive DOM "screen" overlaid on the macbook display.
-                  `occluders` passes the walls/floor/ceiling group so the
-                  CSS3D layer disappears when a wall sits between camera
-                  and screen — without false-positives from the macbook lid
-                  (which lives outside the Ground subtree). */}
+              {/* Interactive DOM "screen" overlaid on the macbook display. */}
               <LaptopScreen
                 ref={laptopScreenRef}
                 isActive={laptopActive}
-                occluders={[groundRef]}
                 onHoverChange={handleLaptopHover}
                 onActivate={handleLaptopActivate}
               />
@@ -750,7 +736,6 @@ export default function ModelViewer() {
 
             {/* Desk Model */}
             <Model
-              ref={deskRef}
               scale={MODELS.DESK.SCALE}
               position={MODELS.DESK.POSITION}
               url={MODELS.DESK.URL}
@@ -758,7 +743,6 @@ export default function ModelViewer() {
 
             {/* Chair — in front of the desk */}
             <Model
-              ref={chairRef}
               url={MODELS.CHAIR.URL}
               position={MODELS.CHAIR.POSITION}
               rotation={MODELS.CHAIR.ROTATION}
