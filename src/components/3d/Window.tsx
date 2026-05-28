@@ -4,41 +4,28 @@ import { SCENE_CONFIG } from "../../constants/scene";
 const { ROOM, WINDOW } = SCENE_CONFIG;
 
 /**
- * Window frame placed in the cutout on the right wall (opposite the gallery).
- * The wall cutout itself is created by 4 strips in Ground.tsx; this component
- * just renders the frame bars around the opening, slightly protruding into the
- * room interior so they catch light and cast shadows.
+ * Round "spaceship porthole" window in the right-wall cutout (opposite the
+ * gallery). The circular hole through the wall and its reveal tunnel are built
+ * in Ground.tsx; this component adds the flush mounting bezel, the raised
+ * metallic rim, and the glass pane. No muntin bars / cross dividers — a clean
+ * porthole.
  */
 export function Window() {
-  const cw = WINDOW.CUTOUT_WIDTH;
-  const ch = WINDOW.CUTOUT_HEIGHT;
-  const cy = WINDOW.CUTOUT_CENTER_Y;
-  const t = WINDOW.FRAME_THICKNESS;
-  const d = WINDOW.FRAME_DEPTH;
-  const wallX = ROOM.HALF - ROOM.WALL_INSET; // right wall position
-  // Sit half-embedded in the wall, half protruding into the room
-  const frameX = wallX - d / 2;
+  const r = WINDOW.RADIUS;
+  const cy = WINDOW.CENTER_Y;
+  const tube = WINDOW.FRAME_TUBE;
+  const seg = WINDOW.SEGMENTS;
+  const wallX = ROOM.HALF - ROOM.WALL_INSET; // interior wall face
 
-  const material = (
-    <meshStandardMaterial
-      color={WINDOW.FRAME_COLOR}
-      metalness={WINDOW.FRAME_METALNESS}
-      roughness={WINDOW.FRAME_ROUGHNESS}
-    />
-  );
-
-  // Box dimensions are [x_depth, y_height, z_width] in world axes
   return (
     <group>
-      {/* Top bar */}
-      <mesh position={[frameX, cy + ch / 2 + t / 2, 0]} castShadow>
-        <boxGeometry args={[d, t, cw + 2 * t]} />
-        {material}
-      </mesh>
-
-      {/* Bottom bar */}
-      <mesh position={[frameX, cy - ch / 2 - t / 2, 0]} castShadow>
-        <boxGeometry args={[d, t, cw + 2 * t]} />
+      {/* Flat mounting bezel — flush on the interior wall around the opening */}
+      <mesh
+        position={[wallX - 0.002, cy, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+        castShadow
+      >
+        <ringGeometry args={[r, r + tube * 1.6, seg]} />
         <meshStandardMaterial
           color={WINDOW.FRAME_COLOR}
           metalness={WINDOW.FRAME_METALNESS}
@@ -46,9 +33,13 @@ export function Window() {
         />
       </mesh>
 
-      {/* Left bar (-Z side) */}
-      <mesh position={[frameX, cy, -(cw / 2 + t / 2)]} castShadow>
-        <boxGeometry args={[d, ch, t]} />
+      {/* Raised metallic rim ring straddling the opening edge */}
+      <mesh
+        position={[wallX - tube * 0.5, cy, 0]}
+        rotation={[0, Math.PI / 2, 0]}
+        castShadow
+      >
+        <torusGeometry args={[r, tube, 20, seg]} />
         <meshStandardMaterial
           color={WINDOW.FRAME_COLOR}
           metalness={WINDOW.FRAME_METALNESS}
@@ -56,42 +47,11 @@ export function Window() {
         />
       </mesh>
 
-      {/* Right bar (+Z side) */}
-      <mesh position={[frameX, cy, cw / 2 + t / 2]} castShadow>
-        <boxGeometry args={[d, ch, t]} />
-        <meshStandardMaterial
-          color={WINDOW.FRAME_COLOR}
-          metalness={WINDOW.FRAME_METALNESS}
-          roughness={WINDOW.FRAME_ROUGHNESS}
-        />
-      </mesh>
-
-      {/* Horizontal cross divider */}
-      <mesh position={[frameX, cy, 0]} castShadow>
-        <boxGeometry args={[d * 0.8, t * 0.6, cw]} />
-        <meshStandardMaterial
-          color={WINDOW.FRAME_COLOR}
-          metalness={WINDOW.FRAME_METALNESS}
-          roughness={WINDOW.FRAME_ROUGHNESS}
-        />
-      </mesh>
-
-      {/* Vertical cross divider */}
-      <mesh position={[frameX, cy, 0]} castShadow>
-        <boxGeometry args={[d * 0.8, ch, t * 0.6]} />
-        <meshStandardMaterial
-          color={WINDOW.FRAME_COLOR}
-          metalness={WINDOW.FRAME_METALNESS}
-          roughness={WINDOW.FRAME_ROUGHNESS}
-        />
-      </mesh>
-
-      {/* Glass pane — alpha-blended, double-sided. Symmetric visibility from
-          both sides (no screen-space refraction quirks) and stays sharp.
-          depthWrite=false so the glass doesn't occlude transparent objects
-          behind it (Stars) when the per-frame transparency sort flickers. */}
+      {/* Glass pane — alpha-blended, double-sided. depthWrite=false so it
+          doesn't occlude the Stars behind it when the per-frame transparency
+          sort flickers. */}
       <mesh position={[wallX, cy, 0]} rotation={[0, -Math.PI / 2, 0]}>
-        <planeGeometry args={[cw, ch]} />
+        <circleGeometry args={[r * 0.99, seg]} />
         <meshStandardMaterial
           color="#cfd9e8"
           transparent

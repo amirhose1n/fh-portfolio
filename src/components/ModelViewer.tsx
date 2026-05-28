@@ -1,12 +1,13 @@
 import { Box, OrbitControls, Stars, useProgress } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { SCENE_CONFIG } from "../constants/scene";
 import { useCameraAnimation } from "../hooks/useCameraAnimation";
 import { AudioCtx, useAudio } from "../hooks/useAudio";
-import { RESUME_PDF } from "./laptop-os/icons";
 import type { Area } from "../types/3d";
+
+const RESUME_PDF = "/files/amirhosein-farhoodi.docx.pdf";
 import { Gallery, Ground, LaptopScreen, Model, SpeakerAudio, Window } from "./3d";
 import type { GalleryHandle } from "./3d/Gallery";
 import type { LaptopScreenHandle } from "./3d/LaptopScreen";
@@ -94,6 +95,22 @@ function LoadingOverlay({ visible }: { visible: boolean }) {
   );
 }
 
+// Fires once the Suspense boundary's contents are mounted AND a frame has
+// actually been rendered with the room geometry present. React only mounts
+// Suspense children after every suspending sibling resolves, so this is a
+// reliable "the room is on screen" signal — unlike useProgress, which reports
+// download completion before models are parsed and uploaded to the GPU.
+function SceneReadySignal({ onReady }: { onReady: () => void }) {
+  const frames = useRef(0);
+  useFrame(() => {
+    frames.current += 1;
+    // Wait two frames so the first paint containing the room is on screen
+    // before we start fading the loading overlay out.
+    if (frames.current === 2) onReady();
+  });
+  return null;
+}
+
 // All areas (including Overview at index 0) cycle freely — wheel/arrow keys
 // wrap through every view in both directions.
 function nextAreaIndex(current: number, direction: number, total: number) {
@@ -159,9 +176,10 @@ export default function ModelViewer() {
     "loading",
   );
   const [freeMode, setFreeMode] = useState(false);
-  const { progress, active } = useProgress();
+  // True once the Suspense room content has mounted and rendered a frame.
+  const [sceneReady, setSceneReady] = useState(false);
   const audioCtx = useAudio();
-  const { isOn: audioOn, toggle: toggleAudio, turnOn: turnAudioOn } = audioCtx;
+  const { isOn: audioOn, toggle: toggleAudio } = audioCtx;
 
   const { animate: animateCamera, cancel: cancelAnimation } =
     useCameraAnimation();
@@ -390,10 +408,13 @@ export default function ModelViewer() {
     }
   }, []);
 
-  // Loading → intro flythrough → ready
+  // Loading → intro flythrough → ready.
+  // Gated on `sceneReady` (the room is actually rendered) rather than download
+  // progress, so the overlay never lifts onto an empty starfield while the
+  // models are still parsing/uploading.
   useEffect(() => {
     if (introPhase !== "loading") return;
-    if (active || progress < 100) return;
+    if (!sceneReady) return;
 
     const fadeTimer = window.setTimeout(() => {
       if (!cameraRef.current || !controlsRef.current) return;
@@ -427,16 +448,13 @@ export default function ModelViewer() {
     }, INTRO_FADE_DELAY);
 
     return () => window.clearTimeout(fadeTimer);
-  }, [introPhase, progress, active, animateCamera]);
+  }, [introPhase, sceneReady, animateCamera]);
 
-  // SpeakerAudio is mounted from the start so the audio file loads as part
-  // of the initial LoadingOverlay — the user enters the room with music
-  // ready to go. The component handles its own user-gesture unlock when
-  // the AudioContext is suspended.
-  useEffect(() => {
-    if (introPhase !== "ready") return;
-    turnAudioOn();
-  }, [introPhase, turnAudioOn]);
+  // SpeakerAudio is mounted from the start so the mp3 loads alongside the rest
+  // of the scene and the track is armed "on" from the first frame (see
+  // useAudio). SpeakerAudio handles the autoplay-policy unlock itself — it
+  // resumes immediately when allowed, otherwise on the first user gesture — so
+  // playback no longer waits for the intro flythrough to finish.
 
   // Handle wheel and keyboard navigation
   useEffect(() => {
@@ -614,6 +632,7 @@ export default function ModelViewer() {
         )}
 
         <Suspense fallback={null}>
+          <SceneReadySignal onReady={() => setSceneReady(true)} />
           <Ground />
           <Window />
           <Gallery

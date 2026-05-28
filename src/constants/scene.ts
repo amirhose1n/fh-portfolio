@@ -112,16 +112,16 @@ export const SCENE_CONFIG = {
     },
   },
 
-  // Window on the right wall (opposite the gallery) — cutout + frame styling
+  // Round "spaceship porthole" window on the right wall (opposite the gallery).
+  // RADIUS drives the circular cutout, reveal tunnel, glass, and metallic rim.
   WINDOW: {
-    CUTOUT_WIDTH: 0.9,
-    CUTOUT_HEIGHT: 1.0,
-    CUTOUT_CENTER_Y: ROOM_CENTER_Y,
-    FRAME_THICKNESS: 0.05,
-    FRAME_DEPTH: 0.04,
-    FRAME_COLOR: "#5c4a2f",
-    FRAME_METALNESS: 0.3,
-    FRAME_ROUGHNESS: 0.5,
+    RADIUS: 0.5,
+    CENTER_Y: ROOM_CENTER_Y,
+    SEGMENTS: 64,
+    FRAME_TUBE: 0.045,
+    FRAME_COLOR: "#9aa3ad",
+    FRAME_METALNESS: 0.95,
+    FRAME_ROUGHNESS: 0.28,
   },
 
   // Monitor model placement (within portfolio group)

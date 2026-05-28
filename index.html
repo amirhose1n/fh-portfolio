@@ -4,17 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
-
-    <!-- js-dos (DOS emulator) for the in-laptop Doom app -->
-    <link rel="stylesheet" href="/js-dos/js-dos.css" />
-    <script src="/js-dos/js-dos.js"></script>
-    <script>
-      // Tell emulators-ui where to fetch its wasm/worker assets from.
-      if (typeof emulators !== "undefined") {
-        emulators.pathPrefix = "/js-dos/";
-      }
-    </script>
+    <!-- Fetch the soundtrack early/high-priority so it's ready to play ASAP -->
+    <link
+      rel="preload"
+      as="audio"
+      href="/musics/interstllar.mp3"
+      type="audio/mpeg"
+      fetchpriority="high"
+    />
+    <title>Amirhosein Farhoodi — Portfolio</title>
   </head>
   <body>
     <div id="root"></div>

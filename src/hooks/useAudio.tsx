@@ -21,7 +21,11 @@ interface AudioContextValue {
 export const AudioCtx = createContext<AudioContextValue | null>(null);
 
 export function AudioProvider({ children }: { children: ReactNode }) {
-  const [isOn, setIsOn] = useState(false);
+  // Armed "on" from the start so the track can begin the moment it has loaded
+  // and the browser's autoplay policy allows it (immediately if the page is
+  // already unlocked, otherwise on the first user gesture) — no waiting for
+  // the intro flythrough to finish.
+  const [isOn, setIsOn] = useState(true);
 
   const turnOn = useCallback(() => setIsOn(true), []);
   const turnOff = useCallback(() => setIsOn(false), []);

@@ -9,7 +9,14 @@
       "Bash(rtk find *)",
       "Bash(cp j:/projects/fh-portfolio/portfolio-inner-site/public/doom.jsdos j:/projects/fh-portfolio/fh-portfolio/public/doom.jsdos)",
       "Bash(cp -r j:/projects/fh-portfolio/portfolio-inner-site/public/js-dos j:/projects/fh-portfolio/fh-portfolio/public/js-dos)",
-      "Bash(rtk tsc *)"
+      "Bash(rtk tsc *)",
+      "Bash(mkdir -p \"j:/projects/fh-portfolio/fh-portfolio-inner/src/laptop-os/apps\" \"j:/projects/fh-portfolio/fh-portfolio-inner/public\")",
+      "PowerShell($src = \"j:\\\\projects\\\\fh-portfolio\\\\fh-portfolio\\\\public\"; $dst = \"j:\\\\projects\\\\fh-portfolio\\\\fh-portfolio-inner\\\\public\"; Copy-Item -Path \"$src\\\\Images\\\\LaptopFrame\" -Destination \"$dst\\\\Images\\\\LaptopFrame\" -Recurse -Force; Copy-Item -Path \"$src\\\\js-dos\" -Destination \"$dst\\\\js-dos\" -Recurse -Force; Copy-Item -Path \"$src\\\\files\" -Destination \"$dst\\\\files\" -Recurse -Force; Copy-Item -Path \"$src\\\\doom.jsdos\" -Destination \"$dst\\\\doom.jsdos\" -Force; Get-ChildItem $dst -Recurse | Measure-Object -Property Length -Sum | Select-Object Count, @{N='SizeMB';E={[math]::Round\\($_.Sum/1MB,1\\)}})",
+      "Bash(rtk git *)"
+    ],
+    "additionalDirectories": [
+      "j:\\projects\\fh-portfolio\\fh-portfolio-inner\\src\\laptop-os",
+      "j:\\projects\\fh-portfolio\\fh-portfolio-inner"
     ]
   }
 }

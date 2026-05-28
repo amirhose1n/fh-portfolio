@@ -1,11 +1,14 @@
 import { Html } from "@react-three/drei";
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import { SCENE_CONFIG } from "../../constants/scene";
-import { AudioCtx, useAudio } from "../../hooks/useAudio";
-import { LaptopOS } from "../laptop-os/LaptopOS";
 
 const { LAPTOP_SCREEN } = SCENE_CONFIG;
+
+// Dev: http://localhost:5174 (fh-portfolio-inner). Prod: built into /inner/.
+const INNER_URL =
+  (import.meta.env.VITE_INNER_URL as string | undefined) ??
+  (import.meta.env.DEV ? "http://localhost:5174" : "/inner/");
 
 export interface LaptopScreenHandle {
   /** World-space position of the screen's center. */
@@ -35,12 +38,7 @@ const HTML_SCALE: [number, number, number] = [
 export const LaptopScreen = forwardRef<LaptopScreenHandle, LaptopScreenProps>(
   function LaptopScreen({ isActive, onHoverChange, onActivate }, ref) {
     const groupRef = useRef<THREE.Group>(null);
-    // drei's <Html> mounts its children via ReactDOM.createRoot — a new,
-    // isolated React tree that doesn't inherit any context from outside.
-    // We read the audio context here (we're inside the Canvas tree where
-    // ModelViewer's AudioCtx bridge is visible) and re-provide it as part
-    // of the JSX passed to <Html> so LaptopOS can read useAudio().
-    const audio = useAudio();
+    const iframeRef = useRef<HTMLIFrameElement>(null);
 
     useImperativeHandle(ref, () => ({
       getWorldPosition: () => {
@@ -54,6 +52,24 @@ export const LaptopScreen = forwardRef<LaptopScreenHandle, LaptopScreenProps>(
         return n.normalize();
       },
     }));
+
+    // Tell the inner app when the user has zoomed in / is interacting with
+    // the OS, so it can hide transient UI in idle mode.
+    useEffect(() => {
+      const send = () => {
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: "fh:setActive", value: isActive },
+          "*",
+        );
+      };
+      // The inner app might still be loading the first time isActive flips.
+      // Send now AND on load so it gets the message either way.
+      send();
+      const iframe = iframeRef.current;
+      if (!iframe) return;
+      iframe.addEventListener("load", send);
+      return () => iframe.removeEventListener("load", send);
+    }, [isActive]);
 
     const handlePointerOver = (e: any) => {
       e.stopPropagation();
@@ -105,34 +121,35 @@ export const LaptopScreen = forwardRef<LaptopScreenHandle, LaptopScreenProps>(
           </mesh>
         )}
 
-        {/* The actual DOM screen content. `transform` mounts it in 3D
-            space via CSS3D. drei's `occlude` would only do an all-or-
-            nothing raycast through the html's centre — half-on-wall
-            blacks the entire screen — so we don't use it here. Proper
-            per-pixel occlusion would require rendering the OS to a real
-            WebGL texture (like the gallery planes). A tiny forward Z
-            offset (0.005) keeps it visually in front of the macbook lid. */}
+        {/* The OS lives in a sibling Vite app (fh-portfolio-inner) and is
+            embedded via iframe. `occlude="blending"` gives per-pixel
+            occlusion against the WebGL scene — drei renders an invisible
+            depth-only proxy and the CSS3D Html sits *behind* the canvas,
+            so walls and other meshes correctly hide the screen. */}
         <Html
           transform
+          occlude="blending"
           position={[0, 0, 0.005]}
           scale={HTML_SCALE}
-          // `pointerEvents` is drei's own prop — it controls the wrapper
-          // that actually catches DOM events. Setting it on `style` only
-          // affects the innermost child, leaving the wrapper to swallow
-          // clicks before they ever reach the 3D hit-area mesh below.
           pointerEvents={isActive ? "auto" : "none"}
-          // Cap the portal'd DOM's z-index well below the loading overlay
-          // (z=10000). Drei defaults to ~16.7M, which leaks through any
-          // sibling overlay — including the intro loader.
           zIndexRange={[100, 0]}
           style={{
             width: `${LAPTOP_SCREEN.PIXEL_WIDTH}px`,
             height: `${LAPTOP_SCREEN.PIXEL_HEIGHT}px`,
           }}
         >
-          <AudioCtx.Provider value={audio}>
-            <LaptopOS isActive={isActive} />
-          </AudioCtx.Provider>
+          <iframe
+            ref={iframeRef}
+            src={INNER_URL}
+            title="LaptopOS"
+            style={{
+              width: "100%",
+              height: "100%",
+              border: 0,
+              display: "block",
+              background: "#000",
+            }}
+          />
         </Html>
       </group>
     );

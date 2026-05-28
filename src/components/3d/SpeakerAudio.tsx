@@ -42,9 +42,14 @@ export function SpeakerAudio({ url, distance, volume }: SpeakerAudioProps) {
       return;
     }
 
-    // Context is suspended — resume() only succeeds when called from inside
-    // a user-gesture handler. Hook one-shot listeners on every common input
-    // so the first thing the user does unlocks audio.
+    // Context is suspended — try to resume right away. This succeeds without a
+    // gesture when the page already has media engagement, letting the track
+    // start as soon as it has loaded (even before the intro finishes).
+    audio.context.resume().then(sync).catch(() => {});
+
+    // Fallback: resume() only reliably succeeds from inside a user-gesture
+    // handler, so also hook one-shot listeners on every common input — the
+    // first thing the user does unlocks audio.
     const onGesture = () => {
       audio.context.resume().then(sync).catch(() => {});
     };

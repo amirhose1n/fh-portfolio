@@ -1,7 +1,38 @@
 import { useLoader } from "@react-three/fiber";
-import { forwardRef, useRef } from "react";
+import { forwardRef, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { SCENE_CONFIG } from "../../../constants/scene";
+
+// A rectangular wall plane (centered at origin) with a circular hole punched
+// through its center. ShapeGeometry seeds UVs from raw vertex positions, so we
+// remap them to 0..1 across the bounding box — that way the wall texture tiles
+// exactly like the surrounding plane-geometry walls.
+function makeHoledWall(
+  width: number,
+  height: number,
+  radius: number,
+  segments: number,
+) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, -height / 2);
+  shape.lineTo(width / 2, -height / 2);
+  shape.lineTo(width / 2, height / 2);
+  shape.lineTo(-width / 2, height / 2);
+  shape.lineTo(-width / 2, -height / 2);
+
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, radius, 0, Math.PI * 2, true);
+  shape.holes.push(hole);
+
+  const geo = new THREE.ShapeGeometry(shape, segments);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    uv.setXY(i, pos.getX(i) / width + 0.5, pos.getY(i) / height + 0.5);
+  }
+  uv.needsUpdate = true;
+  return geo;
+}
 
 const { SIZE, HALF, FLOOR_Y, CEILING_Y, CENTER_Y, WALL_INSET, WALL_THICKNESS } =
   SCENE_CONFIG.ROOM;
@@ -73,6 +104,16 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
   const revealSpan = ext - wallInset; // 0.07 — wall slab depth (incl. inset)
   const revealCenterX = (wallInset + ext) / 2; // midpoint of wall slab in X
 
+  // Right-wall planes carrying the round porthole cutout (interior + exterior).
+  const interiorWallGeo = useMemo(
+    () => makeHoledWall(SIZE, SIZE, WINDOW.RADIUS, WINDOW.SEGMENTS),
+    [],
+  );
+  const exteriorWallGeo = useMemo(
+    () => makeHoledWall(cubeSize, SIZE, WINDOW.RADIUS, WINDOW.SEGMENTS),
+    [cubeSize],
+  );
+
   const innerMatProps = {
     map: wallMap,
     normalMap: wallNormalMap,
@@ -135,81 +176,34 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
         <meshStandardMaterial {...innerMatProps} />
       </mesh>
 
-      {/* Right wall — split into 4 strips around the window cutout */}
-      {(() => {
-        const cw = WINDOW.CUTOUT_WIDTH;
-        const ch = WINDOW.CUTOUT_HEIGHT;
-        const cy = WINDOW.CUTOUT_CENTER_Y;
-        const topH = CEILING_Y - (cy + ch / 2);
-        const topCenterY = CEILING_Y - topH / 2;
-        const bottomH = cy - ch / 2 - FLOOR_Y;
-        const bottomCenterY = FLOOR_Y + bottomH / 2;
-        const sideW = (SIZE - cw) / 2;
-        const nearZ = -(HALF - sideW / 2);
-        const farZ = HALF - sideW / 2;
-        const rot: [number, number, number] = [0, -Math.PI / 2, 0];
-        return (
-          <>
-            <mesh
-              position={[wallInset, topCenterY, 0]}
-              rotation={rot}
-              receiveShadow
-            >
-              <planeGeometry args={[SIZE, topH]} />
-              <meshStandardMaterial {...innerMatProps} />
-            </mesh>
-            <mesh
-              position={[wallInset, bottomCenterY, 0]}
-              rotation={rot}
-              receiveShadow
-            >
-              <planeGeometry args={[SIZE, bottomH]} />
-              <meshStandardMaterial {...innerMatProps} />
-            </mesh>
-            <mesh
-              position={[wallInset, cy, nearZ]}
-              rotation={rot}
-              receiveShadow
-            >
-              <planeGeometry args={[sideW, ch]} />
-              <meshStandardMaterial {...innerMatProps} />
-            </mesh>
-            <mesh position={[wallInset, cy, farZ]} rotation={rot} receiveShadow>
-              <planeGeometry args={[sideW, ch]} />
-              <meshStandardMaterial {...innerMatProps} />
-            </mesh>
+      {/* Right wall (interior) — single plane with a round porthole cutout */}
+      <mesh
+        geometry={interiorWallGeo}
+        position={[wallInset, CENTER_Y, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+        receiveShadow
+      >
+        <meshStandardMaterial {...innerMatProps} />
+      </mesh>
 
-            {/* Window cutout reveal — 4 strips spanning the wall slab depth.
-                Uses interior wall texture so the cutout wraps into a doorway
-                reveal. */}
-            <mesh
-              position={[revealCenterX, cy + ch / 2, 0]}
-              rotation={[Math.PI / 2, 0, 0]}
-            >
-              <planeGeometry args={[revealSpan, cw]} />
-              <meshStandardMaterial {...thicknessMatProps} />
-            </mesh>
-            <mesh
-              position={[revealCenterX, cy - ch / 2, 0]}
-              rotation={[-Math.PI / 2, 0, 0]}
-            >
-              <planeGeometry args={[revealSpan, cw]} />
-              <meshStandardMaterial {...thicknessMatProps} />
-            </mesh>
-            <mesh position={[revealCenterX, cy, -cw / 2]} rotation={[0, 0, 0]}>
-              <planeGeometry args={[revealSpan, ch]} />
-              <meshStandardMaterial {...thicknessMatProps} />
-            </mesh>
-            <mesh
-              position={[revealCenterX, cy, cw / 2]}
-              rotation={[0, Math.PI, 0]}
-            >
-              <planeGeometry args={[revealSpan, ch]} />
-              <meshStandardMaterial {...thicknessMatProps} />
-            </mesh>
-          </>
-        );
-      })()}
+      {/* Porthole reveal — open cylinder spanning the wall slab depth so the
+          cutout reads as a tunnel through the wall thickness. */}
+      <mesh
+        position={[revealCenterX, WINDOW.CENTER_Y, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+      >
+        <cylinderGeometry
+          args={[
+            WINDOW.RADIUS,
+            WINDOW.RADIUS,
+            revealSpan,
+            WINDOW.SEGMENTS,
+            1,
+            true,
+          ]}
+        />
+        <meshStandardMaterial {...thicknessMatProps} side={THREE.DoubleSide} />
+      </mesh>
 
       {/* Front wall (interior) */}
       <mesh
@@ -339,60 +333,16 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
         <planeGeometry args={[cubeSize, t]} />
         <meshStandardMaterial {...thicknessMatProps} />
       </mesh>
-      {/* Wall band — 4 strips around the cutout */}
-      {(() => {
-        const cw = WINDOW.CUTOUT_WIDTH;
-        const ch = WINDOW.CUTOUT_HEIGHT;
-        const cy = WINDOW.CUTOUT_CENTER_Y;
-        const topH = CEILING_Y - (cy + ch / 2);
-        const topCenterY = CEILING_Y - topH / 2;
-        const bottomH = cy - ch / 2 - FLOOR_Y;
-        const bottomCenterY = FLOOR_Y + bottomH / 2;
-        const sideW = (cubeSize - cw) / 2;
-        const nearZ = -(ext - sideW / 2);
-        const farZ = ext - sideW / 2;
-        const rot: [number, number, number] = [0, Math.PI / 2, 0];
-        return (
-          <>
-            <mesh
-              position={[ext, topCenterY, 0]}
-              rotation={rot}
-              receiveShadow
-              onUpdate={setLayer1}
-            >
-              <planeGeometry args={[cubeSize, topH]} />
-              <meshStandardMaterial {...outerMatProps} />
-            </mesh>
-            <mesh
-              position={[ext, bottomCenterY, 0]}
-              rotation={rot}
-              receiveShadow
-              onUpdate={setLayer1}
-            >
-              <planeGeometry args={[cubeSize, bottomH]} />
-              <meshStandardMaterial {...outerMatProps} />
-            </mesh>
-            <mesh
-              position={[ext, cy, nearZ]}
-              rotation={rot}
-              receiveShadow
-              onUpdate={setLayer1}
-            >
-              <planeGeometry args={[sideW, ch]} />
-              <meshStandardMaterial {...outerMatProps} />
-            </mesh>
-            <mesh
-              position={[ext, cy, farZ]}
-              rotation={rot}
-              receiveShadow
-              onUpdate={setLayer1}
-            >
-              <planeGeometry args={[sideW, ch]} />
-              <meshStandardMaterial {...outerMatProps} />
-            </mesh>
-          </>
-        );
-      })()}
+      {/* Wall band (exterior) — single plane with the matching porthole cutout */}
+      <mesh
+        geometry={exteriorWallGeo}
+        position={[ext, CENTER_Y, 0]}
+        rotation={[0, Math.PI / 2, 0]}
+        receiveShadow
+        onUpdate={setLayer1}
+      >
+        <meshStandardMaterial {...outerMatProps} />
+      </mesh>
 
       {/* ── Back-opening framing (faces -Z) ──────────────────────
           The back exterior face is intentionally omitted so the Overview
