@@ -45,6 +45,20 @@ export const SCENE_CONFIG = {
     FOV: 60,
     BACKGROUND_COLOR: "#070710",
   },
+  // Procedural nebula sky — a large inverted sphere behind the Stars. Colors,
+  // density and drift are all tunable here; no texture asset involved.
+  NEBULA: {
+    RADIUS: 120, // must enclose the Stars cloud (drei Stars radius+depth)
+    BASE_COLOR: "#070710", // deep-space fill, matches CAMERA.BACKGROUND_COLOR
+    COLOR_A: "#2f3a6b", // muted blue-violet cloud (kept low to limit purple)
+    COLOR_B: "#1f6f8c", // teal cloud — the dominant tint
+    COLOR_C: "#5a2f6b", // faint purple, only in the very densest pockets
+    SCALE: 4.0, // noise frequency — higher = smaller wisps (direction-sampled,
+    //               so this needs to be several units to show structure)
+    INTENSITY: 0.35, // 0..1 cloud strength over the base color — keep it barely
+    //                  visible so the stars stay the focus
+    SPEED: 0.01, // drift speed — keep tiny so it's barely perceptible
+  },
   LIGHTING: {
     CEILING_LAMP: {
       POSITION: [0, ROOM_CEILING_Y - 0.25, 0] as [number, number, number],
@@ -196,18 +210,20 @@ export const SCENE_CONFIG = {
       ROTATION: [5.2, 6.1, 2.8] as [number, number, number],
       SCALE: [1, 1, 1] as [number, number, number],
     },
+    FLOWERS: {
+      // NOTE: this GLB is the ceramic pot only (no plant foliage).
+      URL: "/Models/Flowers/Ceramic_pot_model.glb",
+      // Floor corner by the gallery wall. POSITION/SCALE are starting guesses.
+      POSITION: [-1.25, ROOM_FLOOR_Y, -1.25] as [number, number, number],
+      ROTATION: [0, Math.PI / 4, 0] as [number, number, number],
+      SCALE: 1,
+    },
     COMPUTER: {
       URL: "/Models/Computer/macbook.glb",
       POSITION: [0, -0.555, 0] as [number, number, number],
       ROTATION: [0, 0.3, 0] as [number, number, number],
       // FBX exports default to cm — 0.01 brings it into the room's metre-scale.
       SCALE: 0.12,
-    },
-    ACTION: {
-      URL: "/Models/Actions/Action1.glb",
-      POSITION: [-0.7, 0.82, 0.1] as [number, number, number],
-      ROTATION: [0, 0, 0] as [number, number, number],
-      SCALE: [0.1, 0.1, 0.1] as [number, number, number],
     },
     DESK: {
       URL: "/Models/Desk/computer_desk.glb",
@@ -240,6 +256,14 @@ export const SCENE_CONFIG = {
       POSITION: [1, ROOM_CEILING_Y + 0.12, -1] as [number, number, number],
       ROTATION: [0, Math.PI / 1.2, 0] as [number, number, number],
       SCALE: [0.003, 0.003, 0.003] as [number, number, number],
+    },
+    PLANET: {
+      URL: "/Models/Plaent/atumn.fbx",
+      POSITION: [400, 1.5, 0] as [number, number, number],
+      ROTATION: [0.4, 0, 0.1] as [number, number, number],
+      DIAMETER: 5,
+      SPIN_SPEED: 0.05, // radians/sec — slow drift (~125s per revolution)
+      scale: 3,
     },
   },
 

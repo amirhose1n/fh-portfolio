@@ -146,6 +146,8 @@ function localToWorld(
 
 export interface GalleryHandle {
   deactivate: () => void;
+  /** Zoom into the previous (-1) or next (+1) photo, wrapping around. */
+  step: (direction: number) => void;
 }
 
 interface GalleryProps {
@@ -166,7 +168,9 @@ export const Gallery = forwardRef<GalleryHandle, GalleryProps>(function Gallery(
   wallPosition = GALLERY.WALL_POSITION,
   wallRotation = GALLERY.WALL_ROTATION,
 }, ref) {
-  const [activeFrame, setActiveFrame] = useState<number | null>(null);
+  // Currently zoomed-in frame index (null = gallery overview). Kept in a ref
+  // since nothing renders off it — it only drives keyboard stepping.
+  const activeFrameRef = useRef<number | null>(null);
   const hoveredSet = useRef(new Set<number>());
 
   // Compute wall normal once
@@ -178,7 +182,7 @@ export const Gallery = forwardRef<GalleryHandle, GalleryProps>(function Gallery(
   }, [wallRotation]);
 
   const activateFrame = (index: number) => {
-    setActiveFrame(index);
+    activeFrameRef.current = index;
 
     if (!onFrameActivate) return;
 
@@ -206,7 +210,14 @@ export const Gallery = forwardRef<GalleryHandle, GalleryProps>(function Gallery(
 
   useImperativeHandle(ref, () => ({
     deactivate: () => {
-      setActiveFrame(null);
+      activeFrameRef.current = null;
+    },
+    step: (direction: number) => {
+      const total = GALLERY.IMAGES.length;
+      const current = activeFrameRef.current;
+      // From the overview, ArrowRight opens the first photo, ArrowLeft the last.
+      const base = current === null ? (direction > 0 ? -1 : 0) : current;
+      activateFrame(((base + direction) % total + total) % total);
     },
   }));
 

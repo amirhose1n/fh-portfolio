@@ -1,16 +1,30 @@
 import { Box, OrbitControls, Stars, useProgress } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Suspense, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import * as THREE from "three";
 import { SCENE_CONFIG } from "../constants/scene";
-import { useCameraAnimation } from "../hooks/useCameraAnimation";
 import { AudioCtx, useAudio } from "../hooks/useAudio";
+import { useCameraAnimation } from "../hooks/useCameraAnimation";
 import type { Area } from "../types/3d";
-
-const RESUME_PDF = "/files/amirhosein-farhoodi.docx.pdf";
-import { Gallery, Ground, LaptopScreen, Model, SpeakerAudio, Window } from "./3d";
+import {
+  Gallery,
+  Ground,
+  LaptopScreen,
+  Model,
+  Nebula,
+  SpeakerAudio,
+  Window,
+} from "./3d";
 import type { GalleryHandle } from "./3d/Gallery";
 import type { LaptopScreenHandle } from "./3d/LaptopScreen";
+
+const RESUME_PDF = "/files/amirhosein-farhoodi.docx.pdf";
 
 const {
   DEBUG,
@@ -111,6 +125,22 @@ function SceneReadySignal({ onReady }: { onReady: () => void }) {
   return null;
 }
 
+// Tracks whether the viewport is phone-sized so the bottom nav can swap the
+// (too-wide) per-area pill row for a compact arrow stepper.
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= breakpoint : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 // All areas (including Overview at index 0) cycle freely — wheel/arrow keys
 // wrap through every view in both directions.
 function nextAreaIndex(current: number, direction: number, total: number) {
@@ -176,6 +206,7 @@ export default function ModelViewer() {
     "loading",
   );
   const [freeMode, setFreeMode] = useState(false);
+  const isMobile = useIsMobile();
   // True once the Suspense room content has mounted and rendered a frame.
   const [sceneReady, setSceneReady] = useState(false);
   const audioCtx = useAudio();
@@ -203,7 +234,11 @@ export default function ModelViewer() {
 
   /** Pose computed from the laptop screen's current world transform. */
   const computeLaptopPose = (fraction: number) => {
-    if (!laptopScreenRef.current || !cameraRef.current || !controlsRef.current) {
+    if (
+      !laptopScreenRef.current ||
+      !cameraRef.current ||
+      !controlsRef.current
+    ) {
       return null;
     }
     const screenPos = laptopScreenRef.current.getWorldPosition();
@@ -214,8 +249,10 @@ export default function ModelViewer() {
       .clone()
       .add(screenNormal.clone().multiplyScalar(LAPTOP_SCREEN.ZOOM_DISTANCE));
 
-    const basePos = laptopBaseRef.current?.position ?? cameraRef.current.position;
-    const baseTarget = laptopBaseRef.current?.target ?? controlsRef.current.target;
+    const basePos =
+      laptopBaseRef.current?.position ?? cameraRef.current.position;
+    const baseTarget =
+      laptopBaseRef.current?.target ?? controlsRef.current.target;
 
     const lerpedPos = basePos.clone().lerp(fullZoomPos, fraction);
     const lerpedTarget = baseTarget.clone().lerp(screenPos, fraction);
@@ -256,9 +293,11 @@ export default function ModelViewer() {
     );
   };
 
-  const handleLaptopActivate = () => {
+  // Zoom the camera into the laptop screen from wherever it currently sits.
+  // No area guard — callers are responsible for being on (or arriving at) the
+  // Portfolio view so the captured base pose is correct.
+  const zoomIntoLaptop = () => {
     if (laptopActive) return;
-    if (areas[currentArea]?.name !== AREAS.PORTFOLIO.name) return;
     if (!cameraRef.current || !controlsRef.current) return;
 
     captureLaptopBase();
@@ -278,6 +317,11 @@ export default function ModelViewer() {
         onComplete: () => setIsTransitioning(false),
       },
     );
+  };
+
+  const handleLaptopActivate = () => {
+    if (areas[currentArea]?.name !== AREAS.PORTFOLIO.name) return;
+    zoomIntoLaptop();
   };
 
   const handleLaptopExit = () => {
@@ -311,7 +355,10 @@ export default function ModelViewer() {
     );
   };
 
-  // Handle gallery frame activate / deactivate
+  // Handle gallery frame activate / deactivate. Manages `isTransitioning` on
+  // both legs: the animation hook's cancel() never fires onComplete, so if we
+  // don't reset the flag here a cancelled tween would leave it stuck true and
+  // freeze all scroll/keyboard navigation.
   const handleFrameActivate = (
     worldPos: [number, number, number] | null,
     zoomPos: [number, number, number] | null,
@@ -321,14 +368,15 @@ export default function ModelViewer() {
     cancelAnimation();
 
     if (worldPos && zoomPos) {
-      // Save gallery view position on first zoom
+      // Anchor zoom-back to the canonical gallery pose so it always returns to
+      // the overview, even if a frame was clicked mid-transition.
       if (!galleryBaseRef.current) {
         galleryBaseRef.current = {
-          position: cameraRef.current.position.clone(),
-          target: controlsRef.current.target.clone(),
+          position: new THREE.Vector3(...AREAS.GALLERY.position),
+          target: new THREE.Vector3(...AREAS.GALLERY.target),
         };
       }
-      // Zoom to frame
+      setIsTransitioning(true);
       animateCamera(
         { camera: cameraRef.current, controls: controlsRef.current },
         [zoomPos[0], worldPos[1], zoomPos[2]],
@@ -336,12 +384,14 @@ export default function ModelViewer() {
         {
           duration: ANIMATION.GALLERY_ZOOM_DURATION,
           easingPower: ANIMATION.EASING_POWER,
+          onComplete: () => setIsTransitioning(false),
         },
       );
     } else if (galleryBaseRef.current) {
       // Zoom back to gallery view
       const base = galleryBaseRef.current;
       galleryBaseRef.current = null;
+      setIsTransitioning(true);
       animateCamera(
         { camera: cameraRef.current, controls: controlsRef.current },
         base.position.toArray() as [number, number, number],
@@ -349,14 +399,24 @@ export default function ModelViewer() {
         {
           duration: ANIMATION.GALLERY_ZOOM_DURATION,
           easingPower: ANIMATION.EASING_POWER,
+          onComplete: () => setIsTransitioning(false),
         },
       );
     }
   };
 
-  // Move to a specific area
+  // Move to a specific area. Navigating away from the laptop first drops any
+  // zoom/hover state — otherwise `laptopActive` stays stuck "on" off-screen and
+  // blocks ever re-entering the laptop.
   const moveToArea = (areaIndex: number) => {
     if (isTransitioning || areaIndex === currentArea) return;
+
+    if (laptopActive || laptopBaseRef.current) {
+      laptopBaseRef.current = null;
+      laptopHoveredRef.current = false;
+      document.body.style.cursor = "";
+      setLaptopActive(false);
+    }
 
     setCurrentArea(areaIndex);
     setIsTransitioning(true);
@@ -491,6 +551,19 @@ export default function ModelViewer() {
         return;
       }
 
+      // Left/Right step between photos while in the Gallery (works from the
+      // overview too — the first press zooms into a photo).
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        if (introPhase !== "ready" || freeMode || laptopActive) return;
+        const galleryIndex = areas.findIndex(
+          (a) => a.name === AREAS.GALLERY.name,
+        );
+        if (currentArea !== galleryIndex) return;
+        event.preventDefault();
+        galleryRef.current?.step(event.key === "ArrowRight" ? 1 : -1);
+        return;
+      }
+
       if (event.key === "ArrowUp" || event.key === "ArrowDown") {
         event.preventDefault();
 
@@ -541,276 +614,287 @@ export default function ModelViewer() {
         {/* Bridge the audio context across the r3f reconciler boundary so
             LaptopOS (mounted via drei's <Html> portal) can read useAudio. */}
         <AudioCtx.Provider value={audioCtx}>
-        {/* Night sky */}
-        <Stars
-          radius={50}
-          depth={40}
-          count={1500}
-          factor={3}
-          saturation={0.2}
-          fade
-          speed={0.5}
-        />
-
-        {/* Ceiling Lamp */}
-        <group position={LIGHTING.CEILING_LAMP.POSITION}>
-          <pointLight
-            intensity={LIGHTING.CEILING_LAMP.INTENSITY}
-            color={LIGHTING.CEILING_LAMP.COLOR}
-            decay={LIGHTING.CEILING_LAMP.DECAY}
-            castShadow
-            distance={LIGHTING.CEILING_LAMP.DISTANCE}
-            shadow-mapSize-width={LIGHTING.CEILING_LAMP.SHADOW_MAP_SIZE}
-            shadow-mapSize-height={LIGHTING.CEILING_LAMP.SHADOW_MAP_SIZE}
-            shadow-camera-far={LIGHTING.CEILING_LAMP.DISTANCE}
-            shadow-camera-left={-5}
-            shadow-camera-right={5}
-            shadow-camera-top={5}
-            shadow-camera-bottom={-5}
+          {/* Night sky */}
+          <Nebula />
+          <Stars
+            radius={50}
+            depth={40}
+            count={1500}
+            factor={3}
+            saturation={0.2}
+            fade
+            speed={0.5}
           />
-          {DEBUG.ENABLED && (
-            <mesh>
-              <sphereGeometry args={[0.15, 16, 16]} />
-              <meshBasicMaterial color={LIGHTING.CEILING_LAMP.COLOR} />
-            </mesh>
-          )}
-        </group>
 
-        {/* Moonlight — soft cool light on layer 1 only (rooftop + Starlink).
+          {/* Ceiling Lamp */}
+          <group position={LIGHTING.CEILING_LAMP.POSITION}>
+            <pointLight
+              intensity={LIGHTING.CEILING_LAMP.INTENSITY}
+              color={LIGHTING.CEILING_LAMP.COLOR}
+              decay={LIGHTING.CEILING_LAMP.DECAY}
+              castShadow
+              distance={LIGHTING.CEILING_LAMP.DISTANCE}
+              shadow-mapSize-width={LIGHTING.CEILING_LAMP.SHADOW_MAP_SIZE}
+              shadow-mapSize-height={LIGHTING.CEILING_LAMP.SHADOW_MAP_SIZE}
+              shadow-camera-far={LIGHTING.CEILING_LAMP.DISTANCE}
+              shadow-camera-left={-5}
+              shadow-camera-right={5}
+              shadow-camera-top={5}
+              shadow-camera-bottom={-5}
+            />
+            {DEBUG.ENABLED && (
+              <mesh>
+                <sphereGeometry args={[0.15, 16, 16]} />
+                <meshBasicMaterial color={LIGHTING.CEILING_LAMP.COLOR} />
+              </mesh>
+            )}
+          </group>
+
+          {/* Moonlight — soft cool light on layer 1 only (rooftop + Starlink).
             Target is added as a child via attach="target" so its matrixWorld
             updates and the light actually aims at it (otherwise the light
             silently reverts to aiming at world origin). */}
-        <directionalLight
-          position={LIGHTING.MOONLIGHT.POSITION}
-          intensity={LIGHTING.MOONLIGHT.INTENSITY}
-          color={LIGHTING.MOONLIGHT.COLOR}
-          onUpdate={(self) => self.layers.set(1)}
-        >
-          <object3D attach="target" position={LIGHTING.MOONLIGHT.TARGET} />
-        </directionalLight>
+          <directionalLight
+            position={LIGHTING.MOONLIGHT.POSITION}
+            intensity={LIGHTING.MOONLIGHT.INTENSITY}
+            color={LIGHTING.MOONLIGHT.COLOR}
+            onUpdate={(self) => self.layers.set(1)}
+          >
+            <object3D attach="target" position={LIGHTING.MOONLIGHT.TARGET} />
+          </directionalLight>
 
-        {/* Sky scatter on layer 1 only — moonlit-night atmosphere fill so the
+          {/* Sky scatter on layer 1 only — moonlit-night atmosphere fill so the
             shadowed faces of the exterior shell don't read as solid black.
             Both `ref` and `onUpdate` set the layer to guarantee the constraint
             applies from frame zero (some three.js builds need both). */}
-        <hemisphereLight
-          args={["#b8c8e0", "#1a1a25", 1.2]}
-          ref={(self) => {
-            if (self) self.layers.set(1);
-          }}
-          onUpdate={(self) => self.layers.set(1)}
-        />
-
-        {/* Faint window moonbeam — kept very dim so it's barely perceptible.
-            Narrow cone aimed through the window cutout, light dies off quickly
-            so it just kisses the floor near the window, not the whole room. */}
-        <spotLight
-          position={[2.5, 0.9, 0]}
-          intensity={0.35}
-          color={LIGHTING.MOONLIGHT.COLOR}
-          angle={Math.PI / 10}
-          penumbra={0.85}
-          decay={2}
-          distance={3.5}
-        >
-          <object3D attach="target" position={[0.3, -0.2, 0]} />
-        </spotLight>
-        {DEBUG.ENABLED && (
-          <>
-            {/* Debug box at moonlight source — tweak LIGHTING.MOONLIGHT.POSITION
-                in scene.ts to move the light, this marker follows it. */}
-            <mesh position={LIGHTING.MOONLIGHT.POSITION}>
-              <boxGeometry args={[0.3, 0.3, 0.3]} />
-              <meshBasicMaterial color={LIGHTING.MOONLIGHT.COLOR} />
-            </mesh>
-            {/* Debug marker at moonlight target (where the light is aimed) */}
-            <mesh position={LIGHTING.MOONLIGHT.TARGET}>
-              <boxGeometry args={[0.12, 0.12, 0.12]} />
-              <meshBasicMaterial color="cyan" wireframe />
-            </mesh>
-          </>
-        )}
-
-        <Suspense fallback={null}>
-          <SceneReadySignal onReady={() => setSceneReady(true)} />
-          <Ground />
-          <Window />
-          <Gallery
-            ref={galleryRef}
-            isActive={areas[currentArea]?.name === AREAS.GALLERY.name}
-            onFrameActivate={handleFrameActivate}
-            onWallClick={() =>
-              moveToArea(areas.findIndex((a) => a.name === AREAS.GALLERY.name))
-            }
-            wallPosition={GALLERY.WALL_POSITION}
-            wallRotation={GALLERY.WALL_ROTATION}
+          <hemisphereLight
+            args={["#b8c8e0", "#1a1a25", 1.2]}
+            ref={(self) => {
+              if (self) self.layers.set(1);
+            }}
+            onUpdate={(self) => self.layers.set(1)}
           />
 
-          {/* Debug: Camera position indicators */}
+          {/* Faint window moonbeam — kept very dim so it's barely perceptible.
+            Narrow cone aimed through the window cutout, light dies off quickly
+            so it just kisses the floor near the window, not the whole room. */}
+          <spotLight
+            position={[2.5, 0.9, 0]}
+            intensity={0.35}
+            color={LIGHTING.MOONLIGHT.COLOR}
+            angle={Math.PI / 10}
+            penumbra={0.85}
+            decay={2}
+            distance={3.5}
+          >
+            <object3D attach="target" position={[0.3, -0.2, 0]} />
+          </spotLight>
           {DEBUG.ENABLED && (
             <>
-              {areas.map((area, index) => (
-                <Box
-                  key={`camera-${index}`}
-                  args={[DEBUG.BOX_SIZE, DEBUG.BOX_SIZE, DEBUG.BOX_SIZE]}
-                  position={area.position}
-                >
-                  <meshBasicMaterial color="red" />
-                </Box>
-              ))}
-              <Box
-                args={[DEBUG.BOX_SIZE, DEBUG.BOX_SIZE, DEBUG.BOX_SIZE]}
-                position={MONITOR.POSITION}
-              >
-                <meshBasicMaterial color="orange" />
-              </Box>
-              {areas.map((area, index) => (
-                <Box
-                  key={`target-${index}`}
-                  args={[
-                    DEBUG.TARGET_BOX_SIZE,
-                    DEBUG.TARGET_BOX_SIZE,
-                    DEBUG.TARGET_BOX_SIZE,
-                  ]}
-                  position={area.target}
-                >
-                  <meshBasicMaterial color="blue" />
-                </Box>
-              ))}
-              <primitive
-                object={
-                  new THREE.Line(
-                    new THREE.BufferGeometry().setFromPoints([
-                      new THREE.Vector3(...areas[0].componentPosition),
-                      new THREE.Vector3(...areas[1].componentPosition),
-                    ]),
-                    new THREE.LineBasicMaterial({ color: "yellow" }),
-                  )
-                }
-              />
-              <primitive
-                object={
-                  new THREE.Line(
-                    new THREE.BufferGeometry().setFromPoints([
-                      new THREE.Vector3(...areas[0].position),
-                      new THREE.Vector3(...areas[1].position),
-                    ]),
-                    new THREE.LineBasicMaterial({ color: "orange" }),
-                  )
-                }
-              />
+              {/* Debug box at moonlight source — tweak LIGHTING.MOONLIGHT.POSITION
+                in scene.ts to move the light, this marker follows it. */}
+              <mesh position={LIGHTING.MOONLIGHT.POSITION}>
+                <boxGeometry args={[0.3, 0.3, 0.3]} />
+                <meshBasicMaterial color={LIGHTING.MOONLIGHT.COLOR} />
+              </mesh>
+              {/* Debug marker at moonlight target (where the light is aimed) */}
+              <mesh position={LIGHTING.MOONLIGHT.TARGET}>
+                <boxGeometry args={[0.12, 0.12, 0.12]} />
+                <meshBasicMaterial color="cyan" wireframe />
+              </mesh>
             </>
           )}
 
-          {/* FH Model */}
-          <Model
-            url={MODELS.FH.URL}
-            position={AREAS.OVERVIEW.componentPosition}
-            rotation={MODELS.FH.ROTATION}
-          />
+          <Suspense fallback={null}>
+            <SceneReadySignal onReady={() => setSceneReady(true)} />
+            <Ground />
+            <Window />
+            <Gallery
+              ref={galleryRef}
+              isActive={areas[currentArea]?.name === AREAS.GALLERY.name}
+              onFrameActivate={handleFrameActivate}
+              onWallClick={() =>
+                moveToArea(
+                  areas.findIndex((a) => a.name === AREAS.GALLERY.name),
+                )
+              }
+              wallPosition={GALLERY.WALL_POSITION}
+              wallRotation={GALLERY.WALL_ROTATION}
+            />
 
-          {/* Skateboard Model */}
-          <Model
-            url={MODELS.SKATEBOARD.URL}
-            position={MODELS.SKATEBOARD.POSITION}
-            rotation={MODELS.SKATEBOARD.ROTATION}
-            scale={MODELS.SKATEBOARD.SCALE}
-          />
+            {/* Debug: Camera position indicators */}
+            {DEBUG.ENABLED && (
+              <>
+                {areas.map((area, index) => (
+                  <Box
+                    key={`camera-${index}`}
+                    args={[DEBUG.BOX_SIZE, DEBUG.BOX_SIZE, DEBUG.BOX_SIZE]}
+                    position={area.position}
+                  >
+                    <meshBasicMaterial color="red" />
+                  </Box>
+                ))}
+                <Box
+                  args={[DEBUG.BOX_SIZE, DEBUG.BOX_SIZE, DEBUG.BOX_SIZE]}
+                  position={MONITOR.POSITION}
+                >
+                  <meshBasicMaterial color="orange" />
+                </Box>
+                {areas.map((area, index) => (
+                  <Box
+                    key={`target-${index}`}
+                    args={[
+                      DEBUG.TARGET_BOX_SIZE,
+                      DEBUG.TARGET_BOX_SIZE,
+                      DEBUG.TARGET_BOX_SIZE,
+                    ]}
+                    position={area.target}
+                  >
+                    <meshBasicMaterial color="blue" />
+                  </Box>
+                ))}
+                <primitive
+                  object={
+                    new THREE.Line(
+                      new THREE.BufferGeometry().setFromPoints([
+                        new THREE.Vector3(...areas[0].componentPosition),
+                        new THREE.Vector3(...areas[1].componentPosition),
+                      ]),
+                      new THREE.LineBasicMaterial({ color: "yellow" }),
+                    )
+                  }
+                />
+                <primitive
+                  object={
+                    new THREE.Line(
+                      new THREE.BufferGeometry().setFromPoints([
+                        new THREE.Vector3(...areas[0].position),
+                        new THREE.Vector3(...areas[1].position),
+                      ]),
+                      new THREE.LineBasicMaterial({ color: "orange" }),
+                    )
+                  }
+                />
+              </>
+            )}
 
-          {/* Starlink dish on the roof — exclusive to layer 1 (moonlight only) */}
-          <Model
-            url={MODELS.STARLINK.URL}
-            position={MODELS.STARLINK.POSITION}
-            rotation={MODELS.STARLINK.ROTATION}
-            scale={MODELS.STARLINK.SCALE}
-            layer={1}
-          />
+            {/* FH Model */}
+            <Model
+              url={MODELS.FH.URL}
+              position={AREAS.OVERVIEW.componentPosition}
+              rotation={MODELS.FH.ROTATION}
+            />
 
-          {/* Portfolio Area - Computer Setup */}
-          <group
-            position={AREAS.PORTFOLIO.componentPosition}
-            rotation={[0, Math.PI, 0]}
-          >
-            {/* Monitor / Computer (FBX) */}
+            {/* Skateboard Model */}
+            <Model
+              url={MODELS.SKATEBOARD.URL}
+              position={MODELS.SKATEBOARD.POSITION}
+              rotation={MODELS.SKATEBOARD.ROTATION}
+              scale={MODELS.SKATEBOARD.SCALE}
+            />
+
+            {/* Ceramic pot in the gallery-wall floor corner (pot only — no plant) */}
+            <Model
+              url={MODELS.FLOWERS.URL}
+              position={MODELS.FLOWERS.POSITION}
+              rotation={MODELS.FLOWERS.ROTATION}
+              scale={MODELS.FLOWERS.SCALE}
+            />
+
+            {/* Starlink dish on the roof — exclusive to layer 1 (moonlight only) */}
+            <Model
+              url={MODELS.STARLINK.URL}
+              position={MODELS.STARLINK.POSITION}
+              rotation={MODELS.STARLINK.ROTATION}
+              scale={MODELS.STARLINK.SCALE}
+              layer={1}
+            />
+
+            {/* Distant planet out in space, framed by the porthole */}
+            {/* <Planet /> */}
+
+            {/* Portfolio Area - Computer Setup */}
             <group
-              position={MONITOR.POSITION}
-              scale={MONITOR.SCALE}
-              rotation={MONITOR.ROTATION}
+              position={AREAS.PORTFOLIO.componentPosition}
+              rotation={[0, Math.PI, 0]}
             >
+              {/* Monitor / Computer (FBX) */}
+              <group
+                position={MONITOR.POSITION}
+                scale={MONITOR.SCALE}
+                rotation={MONITOR.ROTATION}
+              >
+                <Model
+                  url={MODELS.COMPUTER.URL}
+                  position={MODELS.COMPUTER.POSITION}
+                  rotation={MODELS.COMPUTER.ROTATION}
+                  scale={MODELS.COMPUTER.SCALE}
+                />
+
+                {/* Interactive DOM "screen" overlaid on the macbook display. */}
+                <LaptopScreen
+                  ref={laptopScreenRef}
+                  isActive={laptopActive}
+                  onHoverChange={handleLaptopHover}
+                  onActivate={handleLaptopActivate}
+                />
+              </group>
+
+              {/* Desk Model */}
               <Model
-                url={MODELS.COMPUTER.URL}
-                position={MODELS.COMPUTER.POSITION}
-                rotation={MODELS.COMPUTER.ROTATION}
-                scale={MODELS.COMPUTER.SCALE}
+                scale={MODELS.DESK.SCALE}
+                position={MODELS.DESK.POSITION}
+                url={MODELS.DESK.URL}
               />
 
-              {/* Interactive DOM "screen" overlaid on the macbook display. */}
-              <LaptopScreen
-                ref={laptopScreenRef}
-                isActive={laptopActive}
-                onHoverChange={handleLaptopHover}
-                onActivate={handleLaptopActivate}
+              {/* Chair — in front of the desk */}
+              <Model
+                url={MODELS.CHAIR.URL}
+                position={MODELS.CHAIR.POSITION}
+                rotation={MODELS.CHAIR.ROTATION}
+                scale={MODELS.CHAIR.SCALE}
               />
-            </group>
 
-            {/* Desk Model */}
-            <Model
-              scale={MODELS.DESK.SCALE}
-              position={MODELS.DESK.POSITION}
-              url={MODELS.DESK.URL}
-            />
-
-            {/* Chair — in front of the desk */}
-            <Model
-              url={MODELS.CHAIR.URL}
-              position={MODELS.CHAIR.POSITION}
-              rotation={MODELS.CHAIR.ROTATION}
-              scale={MODELS.CHAIR.SCALE}
-            />
-
-            {/* Speaker — sits on the desk. Wrapped in a group so the
+              {/* Speaker — sits on the desk. Wrapped in a group so the
                 PositionalAudio shares its world position but isn't scaled by
                 the speaker's tiny 0.0005 (which would shrink the audio
                 rolloff to nothing). The audio loader is isolated in its
                 own Suspense so the multi-MB mp3 download doesn't black out
                 the rest of the room while it streams. */}
-            <group
-              position={MODELS.SPEAKER.POSITION}
-              rotation={MODELS.SPEAKER.ROTATION}
-            >
-              <Model
-                url={MODELS.SPEAKER.URL}
-                scale={MODELS.SPEAKER.SCALE}
-              />
-              <SpeakerAudio
-                url={MODELS.SPEAKER.AUDIO.URL}
-                distance={MODELS.SPEAKER.AUDIO.DISTANCE}
-                volume={MODELS.SPEAKER.AUDIO.VOLUME}
-              />
+              <group
+                position={MODELS.SPEAKER.POSITION}
+                rotation={MODELS.SPEAKER.ROTATION}
+              >
+                <Model url={MODELS.SPEAKER.URL} scale={MODELS.SPEAKER.SCALE} />
+                <SpeakerAudio
+                  url={MODELS.SPEAKER.AUDIO.URL}
+                  distance={MODELS.SPEAKER.AUDIO.DISTANCE}
+                  volume={MODELS.SPEAKER.AUDIO.VOLUME}
+                />
+              </group>
             </group>
-          </group>
-        </Suspense>
+          </Suspense>
 
-        <OrbitControls
-          ref={controlsRef}
-          enablePan={DEBUG.ENABLED || freeMode}
-          enableRotate={DEBUG.ENABLED || freeMode}
-          autoRotate={false}
-          enableZoom={DEBUG.ENABLED || freeMode}
-          minDistance={DEBUG.ENABLED || freeMode ? 0.4 : undefined}
-          maxDistance={DEBUG.ENABLED || freeMode ? 35 : undefined}
-          minPolarAngle={
-            DEBUG.ENABLED || freeMode
-              ? 0
-              : (areas[currentArea]?.minPolarAngle ?? 1.3)
-          }
-          maxPolarAngle={
-            DEBUG.ENABLED || freeMode
-              ? Math.PI
-              : (areas[currentArea]?.maxPolarAngle ?? 1.3)
-          }
-          target={areas[0].target}
-        />
+          <OrbitControls
+            ref={controlsRef}
+            enablePan={DEBUG.ENABLED || freeMode}
+            enableRotate={DEBUG.ENABLED || freeMode}
+            autoRotate={false}
+            enableZoom={DEBUG.ENABLED || freeMode}
+            minDistance={DEBUG.ENABLED || freeMode ? 0.4 : undefined}
+            maxDistance={DEBUG.ENABLED || freeMode ? 35 : undefined}
+            minPolarAngle={
+              DEBUG.ENABLED || freeMode
+                ? 0
+                : (areas[currentArea]?.minPolarAngle ?? 1.3)
+            }
+            maxPolarAngle={
+              DEBUG.ENABLED || freeMode
+                ? Math.PI
+                : (areas[currentArea]?.maxPolarAngle ?? 1.3)
+            }
+            target={areas[0].target}
+          />
         </AudioCtx.Provider>
       </Canvas>
 
@@ -859,12 +943,8 @@ export default function ModelViewer() {
             fontSize: "14px",
             letterSpacing: "0.15em",
             fontWeight: 500,
-            background: audioOn
-              ? "rgba(184, 200, 224, 0.18)"
-              : "rgba(0, 0, 0, 0.5)",
-            border: audioOn
-              ? "1px solid rgba(184, 200, 224, 0.6)"
-              : "1px solid rgba(255, 255, 255, 0.15)",
+            background: "rgba(0, 0, 0, 0.5)",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
             padding: "8px 14px",
             borderRadius: "16px",
             backdropFilter: "blur(10px)",
@@ -934,99 +1014,157 @@ export default function ModelViewer() {
             transition: "background 200ms, border 200ms",
           }}
         >
-          {freeMode ? "EXIT FREE MODE" : "FREE MODE"}
+          {freeMode ? "AUTO VIEW MODE" : "MANUAL MODE"}
         </button>
       </div>
 
-      {/* Area indicator (hidden during free mode) */}
-      <div
-        style={{
+      {/* Bottom navigation (hidden during free mode). Desktop shows one pill
+          per area (the Portfolio pill is "LAPTOP" and zooms into the screen);
+          mobile is too narrow for the row, so it falls back to a compact arrow
+          stepper. */}
+      {(() => {
+        const containerStyle: CSSProperties = {
           position: "absolute",
           bottom: "20px",
           left: "50%",
           transform: "translateX(-50%)",
-          color: "white",
-          fontSize: "18px",
-          fontWeight: "500",
           zIndex: 1000,
-          background: "rgba(0, 0, 0, 0.5)",
-          padding: "8px 8px",
-          borderRadius: "20px",
-          backdropFilter: "blur(10px)",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          maxWidth: "100vw",
           opacity: introPhase === "ready" && !freeMode ? 1 : 0,
           transition: "opacity 500ms ease-in",
           pointerEvents: introPhase === "ready" && !freeMode ? "auto" : "none",
-          display: "flex",
-          alignItems: "center",
-          gap: "4px",
-        }}
-      >
-        <button
-          type="button"
-          aria-label="Previous area"
-          onClick={() =>
-            moveToArea(nextAreaIndex(currentArea, -1, areas.length))
-          }
-          disabled={isTransitioning}
-          style={{
+        };
+
+        if (isMobile) {
+          const arrowStyle: CSSProperties = {
             all: "unset",
-            width: 32,
-            height: 32,
+            width: 36,
+            height: 36,
             borderRadius: "50%",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            color: "white",
             cursor: isTransitioning ? "default" : "pointer",
             opacity: isTransitioning ? 0.4 : 1,
-            transition: "background 120ms, opacity 200ms",
-            fontSize: 18,
-            lineHeight: 1,
-          }}
-          onMouseEnter={(e) => {
-            if (!isTransitioning)
-              e.currentTarget.style.background = "rgba(255,255,255,0.12)";
-          }}
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.background = "transparent")
-          }
-        >
-          ‹
-        </button>
-        <span style={{ padding: "0 12px" }}>
-          {areas[currentArea].name} ({currentArea + 1}/{areas.length})
-        </span>
-        <button
-          type="button"
-          aria-label="Next area"
-          onClick={() =>
-            moveToArea(nextAreaIndex(currentArea, 1, areas.length))
-          }
-          disabled={isTransitioning}
-          style={{
-            all: "unset",
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: isTransitioning ? "default" : "pointer",
-            opacity: isTransitioning ? 0.4 : 1,
-            transition: "background 120ms, opacity 200ms",
-            fontSize: 18,
-            lineHeight: 1,
-          }}
-          onMouseEnter={(e) => {
-            if (!isTransitioning)
-              e.currentTarget.style.background = "rgba(255,255,255,0.12)";
-          }}
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.background = "transparent")
-          }
-        >
-          ›
-        </button>
-      </div>
+          };
+          const chevron = (points: string) => (
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points={points} />
+            </svg>
+          );
+          return (
+            <div style={containerStyle}>
+              <div
+                style={{
+                  color: "white",
+                  fontSize: "16px",
+                  fontWeight: 500,
+                  background: "rgba(0, 0, 0, 0.5)",
+                  padding: "6px 8px",
+                  borderRadius: "20px",
+                  backdropFilter: "blur(10px)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "2px",
+                }}
+              >
+                <button
+                  type="button"
+                  aria-label="Previous area"
+                  onClick={() =>
+                    moveToArea(nextAreaIndex(currentArea, -1, areas.length))
+                  }
+                  disabled={isTransitioning}
+                  style={arrowStyle}
+                >
+                  {chevron("15 18 9 12 15 6")}
+                </button>
+                <span style={{ padding: "0 6px", whiteSpace: "nowrap" }}>
+                  {areas[currentArea].name} ({currentArea + 1}/{areas.length})
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next area"
+                  onClick={() =>
+                    moveToArea(nextAreaIndex(currentArea, 1, areas.length))
+                  }
+                  disabled={isTransitioning}
+                  style={arrowStyle}
+                >
+                  {chevron("9 18 15 12 9 6")}
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        const baseStyle: CSSProperties = {
+          all: "unset",
+          color: "white",
+          fontSize: "12px",
+          letterSpacing: "0.15em",
+          fontWeight: 500,
+          padding: "11px 16px",
+          borderRadius: "20px",
+          backdropFilter: "blur(10px)",
+          cursor: isTransitioning ? "default" : "pointer",
+          opacity: isTransitioning ? 0.5 : 1,
+          boxSizing: "border-box",
+          transition: "background 200ms, border 200ms, opacity 200ms",
+        };
+        const activeBg = "rgba(255, 255, 255, 0.16)";
+        const idleBg = "rgba(0, 0, 0, 0.5)";
+
+        return (
+          <div style={containerStyle}>
+            {areas.map((area, index) => {
+              const isActive = currentArea === index;
+              const isLaptop = area.name === AREAS.PORTFOLIO.name;
+              return (
+                <button
+                  key={area.name}
+                  type="button"
+                  onClick={() => moveToArea(index)}
+                  disabled={isTransitioning}
+                  style={{
+                    ...baseStyle,
+                    background: isActive ? activeBg : idleBg,
+                    border: isActive
+                      ? "1px solid rgba(255, 255, 255, 0.45)"
+                      : "1px solid rgba(255, 255, 255, 0.15)",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isTransitioning && !isActive)
+                      e.currentTarget.style.background =
+                        "rgba(255,255,255,0.14)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isActive
+                      ? activeBg
+                      : idleBg;
+                  }}
+                >
+                  {isLaptop ? "LAPTOP" : area.name.toUpperCase()}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }
