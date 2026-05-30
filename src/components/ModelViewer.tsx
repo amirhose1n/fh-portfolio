@@ -41,8 +41,8 @@ const {
 // Intro flythrough — camera starts very far away on the same sight-line as
 // Overview and dollies straight in. Strong ease-out so it visibly slows down
 // near the end before settling into the final view.
-const INTRO_START_POSITION: [number, number, number] = [0, 22, -20];
-const INTRO_START_TARGET: [number, number, number] = [0, 0, 0];
+const INTRO_START_POSITION: [number, number, number] = [-12, 11, -17];
+const INTRO_START_TARGET: [number, number, number] = [0, 0.3, 0];
 const INTRO_DURATION = 3800;
 const INTRO_FADE_DELAY = 400;
 const INTRO_EASING_POWER = 5;
@@ -109,6 +109,55 @@ function LoadingOverlay({ visible }: { visible: boolean }) {
   );
 }
 
+// DEBUG-only HUD: polls the live camera + orbit target and prints them as
+// ready-to-paste arrays. Orbit to the framing you want, then copy these two
+// lines into an AREAS entry (e.g. OVERVIEW.position / .target).
+function CameraReadout({
+  cameraRef,
+  controlsRef,
+}: {
+  cameraRef: React.RefObject<THREE.Camera | null>;
+  controlsRef: React.RefObject<{ target: THREE.Vector3 } | null>;
+}) {
+  const [text, setText] = useState("…");
+  useEffect(() => {
+    const f = (v: number) => v.toFixed(2);
+    const id = window.setInterval(() => {
+      const cam = cameraRef.current;
+      const ctr = controlsRef.current;
+      if (!cam || !ctr) return;
+      const p = cam.position;
+      const t = ctr.target;
+      setText(
+        `position: [${f(p.x)}, ${f(p.y)}, ${f(p.z)}],\n` +
+          `target:   [${f(t.x)}, ${f(t.y)}, ${f(t.z)}],`,
+      );
+    }, 120);
+    return () => window.clearInterval(id);
+  }, [cameraRef, controlsRef]);
+
+  return (
+    <pre
+      style={{
+        position: "fixed",
+        bottom: 12,
+        left: 12,
+        zIndex: 10001,
+        margin: 0,
+        padding: "8px 10px",
+        background: "rgba(0,0,0,0.65)",
+        color: "#9effa0",
+        font: "11px/1.45 monospace",
+        borderRadius: 6,
+        pointerEvents: "none",
+        whiteSpace: "pre",
+      }}
+    >
+      {text}
+    </pre>
+  );
+}
+
 // Fires once the Suspense boundary's contents are mounted AND a frame has
 // actually been rendered with the room geometry present. React only mounts
 // Suspense children after every suspending sibling resolves, so this is a
@@ -155,6 +204,8 @@ const areas: Area[] = [
     target: AREAS.OVERVIEW.target,
     component: AREAS.OVERVIEW.name,
     componentPosition: AREAS.OVERVIEW.componentPosition,
+    minPolarAngle: AREAS.OVERVIEW.minPolarAngle,
+    maxPolarAngle: AREAS.OVERVIEW.maxPolarAngle,
   },
   {
     name: AREAS.GALLERY.name,
@@ -193,6 +244,73 @@ const areas: Area[] = [
     maxPolarAngle: AREAS.WINDOW.maxPolarAngle,
   },
 ];
+
+// Left-side desktop navigation. Each label flies the camera to one of the
+// existing areas — edit the `areaName` here to remap a menu item to a
+// different view.
+type MenuIconName = "home" | "about" | "skills" | "projects" | "contact";
+
+const MENU_ITEMS: { label: string; areaName: string; icon: MenuIconName }[] = [
+  { label: "HOME", areaName: AREAS.OVERVIEW.name, icon: "home" },
+  { label: "ABOUT", areaName: AREAS.AVATAR.name, icon: "about" },
+  { label: "SKILLS", areaName: AREAS.GALLERY.name, icon: "skills" },
+  { label: "PROJECTS", areaName: AREAS.PORTFOLIO.name, icon: "projects" },
+  { label: "CONTACT", areaName: AREAS.WINDOW.name, icon: "contact" },
+];
+
+const NAV_GOLD = "#e3a92e";
+const NAV_IDLE = "#aeb4bc";
+
+function NavIcon({ name }: { name: MenuIconName }) {
+  const common = {
+    width: 21,
+    height: 21,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (name) {
+    case "home":
+      return (
+        <svg {...common}>
+          <path d="M3 11.5 12 4l9 7.5" />
+          <path d="M5.5 10v9h13v-9" />
+        </svg>
+      );
+    case "about":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="3.2" />
+          <path d="M5.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+        </svg>
+      );
+    case "skills":
+      return (
+        <svg {...common}>
+          <polyline points="8 8 4 12 8 16" />
+          <polyline points="16 8 20 12 16 16" />
+          <line x1="13.5" y1="5.5" x2="10.5" y2="18.5" />
+        </svg>
+      );
+    case "projects":
+      return (
+        <svg {...common}>
+          <path d="M3 6.5h6l2 2.5h10v9.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+        </svg>
+      );
+    case "contact":
+      return (
+        <svg {...common}>
+          <rect x="3" y="5.5" width="18" height="13" rx="1.5" />
+          <path d="m4 7 8 6 8-6" />
+        </svg>
+      );
+  }
+}
 
 export default function ModelViewer() {
   const cameraRef = useRef<THREE.Camera>(null);
@@ -597,7 +715,11 @@ export default function ModelViewer() {
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
       <LoadingOverlay visible={introPhase === "loading"} />
+      {DEBUG.ENABLED && (
+        <CameraReadout cameraRef={cameraRef} controlsRef={controlsRef} />
+      )}
       <Canvas
+        shadows="soft"
         camera={{ position: INTRO_START_POSITION, fov: CAMERA.FOV }}
         style={{ background: CAMERA.BACKGROUND_COLOR }}
         onCreated={({ camera, raycaster }) => {
@@ -628,20 +750,60 @@ export default function ModelViewer() {
 
           {/* Ceiling Lamp */}
           <group position={LIGHTING.CEILING_LAMP.POSITION}>
-            <pointLight
-              intensity={LIGHTING.CEILING_LAMP.INTENSITY}
-              color={LIGHTING.CEILING_LAMP.COLOR}
-              decay={LIGHTING.CEILING_LAMP.DECAY}
-              castShadow
-              distance={LIGHTING.CEILING_LAMP.DISTANCE}
-              shadow-mapSize-width={LIGHTING.CEILING_LAMP.SHADOW_MAP_SIZE}
-              shadow-mapSize-height={LIGHTING.CEILING_LAMP.SHADOW_MAP_SIZE}
-              shadow-camera-far={LIGHTING.CEILING_LAMP.DISTANCE}
-              shadow-camera-left={-5}
-              shadow-camera-right={5}
-              shadow-camera-top={5}
-              shadow-camera-bottom={-5}
-            />
+            {/* Omnidirectional bulb — a room ceiling lamp radiates in every
+                direction, so a pointLight (not a spotLight) is the right
+                fixture: it throws each object's shadow radially outward, giving
+                natural shadows on all sides instead of one downward cone.
+                shadow-camera-far is a tight 6 (just encloses the room). A far
+                plane far past the geometry wastes shadow-map depth precision
+                over empty space, which reads as shadow acne / dark speckling
+                and gets WORSE at higher SHADOW_MAP_SIZE. */}
+
+            {/* Flush-mount ceiling puck — a thick disc hanging a little below
+                the ceiling (a "chandelier"). The dark cylindrical rim gives it
+                visible thickness; the warm glowing face points down into the
+                room. Local +0.13 drops the body so it sits ~0.12 below the
+                ceiling plane with its top almost touching it. */}
+            <group position={[0, 0.1, 0]}>
+              {/* Puck body / rim — dark, supplies the visible thickness */}
+              <mesh>
+                <cylinderGeometry args={[0.34, 0.34, 0.1, 64]} />
+                <meshStandardMaterial
+                  color="#1c1c20"
+                  roughness={0.5}
+                  metalness={0.4}
+                  opacity={100}
+                />
+              </mesh>
+              {/* Warm glowing diffuser face, just beneath the body, facing down.
+                  FrontSide (not DoubleSide): the disc only emits toward the room
+                  below it. Its normal points -Y (down), so from above (Overview
+                  camera) it is back-face culled and invisible — you can't see the
+                  "bulb" from on top of the fixture, like a real recessed lamp. */}
+              <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.051, 0]}>
+                <circleGeometry args={[0.31, 64]} />
+                <meshBasicMaterial
+                  color="#ffe9cc"
+                  toneMapped={false}
+                  side={THREE.FrontSide}
+                />
+              </mesh>
+              <pointLight
+                intensity={LIGHTING.CEILING_LAMP.INTENSITY}
+                color={LIGHTING.CEILING_LAMP.COLOR}
+                decay={LIGHTING.CEILING_LAMP.DECAY}
+                distance={LIGHTING.CEILING_LAMP.DISTANCE}
+                castShadow
+                shadow-mapSize-width={LIGHTING.CEILING_LAMP.SHADOW_MAP_SIZE}
+                shadow-mapSize-height={LIGHTING.CEILING_LAMP.SHADOW_MAP_SIZE}
+                shadow-camera-near={0.5}
+                shadow-camera-far={6}
+                shadow-bias={-0.0005}
+                shadow-normalBias={0.03}
+                shadow-radius={6}
+              />
+            </group>
+
             {DEBUG.ENABLED && (
               <mesh>
                 <sphereGeometry args={[0.15, 16, 16]} />
@@ -650,30 +812,45 @@ export default function ModelViewer() {
             )}
           </group>
 
-          {/* Moonlight — soft cool light on layer 1 only (rooftop + Starlink).
-            Target is added as a child via attach="target" so its matrixWorld
-            updates and the light actually aims at it (otherwise the light
-            silently reverts to aiming at world origin). */}
+          {/* Gentle warm room light at the centre — lifts the whole interior
+            from the middle outward so it isn't just a pool under the lamp.
+            Positional + inside → it can't reach the exterior; kept low so the
+            lamp's cast shadows still read. */}
+          <pointLight
+            position={LIGHTING.CENTER_LIGHT.POSITION}
+            color={LIGHTING.CENTER_LIGHT.COLOR}
+            intensity={LIGHTING.CENTER_LIGHT.INTENSITY}
+            decay={LIGHTING.CENTER_LIGHT.DECAY}
+            distance={LIGHTING.CENTER_LIGHT.DISTANCE}
+          />
+
+          {/* Moonlight — cool light for the exterior shell + Starlink. It casts
+            shadows, and the room shell (walls + ceiling) casts shadows too, so
+            the moonlight is physically occluded from the interior: the walls
+            block it exactly like a real wall would. (Light layers can't confine
+            illumination in three.js, so occlusion is how we keep it outside.)
+            Target via attach="target" so its matrixWorld updates. */}
           <directionalLight
             position={LIGHTING.MOONLIGHT.POSITION}
             intensity={LIGHTING.MOONLIGHT.INTENSITY}
             color={LIGHTING.MOONLIGHT.COLOR}
-            onUpdate={(self) => self.layers.set(1)}
+            castShadow
+            shadow-mapSize-width={LIGHTING.MOONLIGHT.SHADOW_MAP_SIZE}
+            shadow-mapSize-height={LIGHTING.MOONLIGHT.SHADOW_MAP_SIZE}
+            shadow-camera-near={LIGHTING.MOONLIGHT.SHADOW_NEAR}
+            shadow-camera-far={LIGHTING.MOONLIGHT.SHADOW_FAR}
+            shadow-camera-left={-LIGHTING.MOONLIGHT.SHADOW_BOUNDS}
+            shadow-camera-right={LIGHTING.MOONLIGHT.SHADOW_BOUNDS}
+            shadow-camera-top={LIGHTING.MOONLIGHT.SHADOW_BOUNDS}
+            shadow-camera-bottom={-LIGHTING.MOONLIGHT.SHADOW_BOUNDS}
+            shadow-normalBias={0.03}
           >
             <object3D attach="target" position={LIGHTING.MOONLIGHT.TARGET} />
           </directionalLight>
 
-          {/* Sky scatter on layer 1 only — moonlit-night atmosphere fill so the
-            shadowed faces of the exterior shell don't read as solid black.
-            Both `ref` and `onUpdate` set the layer to guarantee the constraint
-            applies from frame zero (some three.js builds need both). */}
-          <hemisphereLight
-            args={["#b8c8e0", "#1a1a25", 1.2]}
-            ref={(self) => {
-              if (self) self.layers.set(1);
-            }}
-            onUpdate={(self) => self.layers.set(1)}
-          />
+          {/* (No exterior hemisphere fill — a hemisphere has no position, so
+            three.js can't keep it off the interior; it was the cool "moonlight
+            inside" bleed. The exterior is lit by the moonlight above instead.) */}
 
           {/* Faint window moonbeam — kept very dim so it's barely perceptible.
             Narrow cone aimed through the window cutout, light dies off quickly
@@ -779,11 +956,11 @@ export default function ModelViewer() {
             )}
 
             {/* FH Model */}
-            <Model
+            {/* <Model
               url={MODELS.FH.URL}
               position={AREAS.OVERVIEW.componentPosition}
               rotation={MODELS.FH.ROTATION}
-            />
+            /> */}
 
             {/* Skateboard Model */}
             <Model
@@ -801,17 +978,59 @@ export default function ModelViewer() {
               scale={MODELS.FLOWERS.SCALE}
             />
 
-            {/* Starlink dish on the roof — exclusive to layer 1 (moonlight only) */}
+            {/* Animated pet cat — idle loop plays via the GLB's baked clip.
+                Sits on the floor in the overview corner near the skateboard. */}
+            <Model
+              url={MODELS.PET.URL}
+              position={MODELS.PET.POSITION}
+              rotation={MODELS.PET.ROTATION}
+              scale={MODELS.PET.SCALE}
+            />
+
+            {/* Cool rim/back light for the cat — traces a moonlit edge along
+                its back so it pops off the dark corner, especially from behind.
+                Tight cone + short distance keep the spill off the rest of the
+                room. Target via attach="target" so its matrixWorld updates. */}
+            <spotLight
+              position={LIGHTING.PET_RIM.POSITION}
+              intensity={LIGHTING.PET_RIM.INTENSITY}
+              color={LIGHTING.PET_RIM.COLOR}
+              angle={LIGHTING.PET_RIM.ANGLE}
+              penumbra={LIGHTING.PET_RIM.PENUMBRA}
+              decay={LIGHTING.PET_RIM.DECAY}
+              distance={LIGHTING.PET_RIM.DISTANCE}
+            >
+              <object3D attach="target" position={LIGHTING.PET_RIM.TARGET} />
+            </spotLight>
+
+            {DEBUG.ENABLED && (
+              <>
+                {/* Solid cube at the pet rim light source — tweak
+                    LIGHTING.PET_RIM.POSITION in scene.ts to move it, this marker
+                    follows. Wire cube marks where the rim is aimed (TARGET). */}
+                <mesh position={LIGHTING.PET_RIM.POSITION}>
+                  <boxGeometry args={[0.12, 0.12, 0.12]} />
+                  <meshBasicMaterial color="lime" />
+                </mesh>
+                <mesh position={LIGHTING.PET_RIM.TARGET}>
+                  <boxGeometry args={[0.08, 0.08, 0.08]} />
+                  <meshBasicMaterial color="magenta" wireframe />
+                </mesh>
+              </>
+            )}
+
+            {/* Starlink dish on the roof — exclusive to layer 1 (moonlight
+                only). No shadows: it's outside and must not throw or catch any
+                shadow from the interior lamp. */}
             <Model
               url={MODELS.STARLINK.URL}
               position={MODELS.STARLINK.POSITION}
               rotation={MODELS.STARLINK.ROTATION}
               scale={MODELS.STARLINK.SCALE}
               layer={1}
+              castShadow={false}
+              receiveShadow={false}
             />
-
-            {/* Distant planet out in space, framed by the porthole */}
-            {/* <Planet /> */}
 
             {/* Portfolio Area - Computer Setup */}
             <group
@@ -1018,10 +1237,74 @@ export default function ModelViewer() {
         </button>
       </div>
 
-      {/* Bottom navigation (hidden during free mode). Desktop shows one pill
-          per area (the Portfolio pill is "LAPTOP" and zooms into the screen);
-          mobile is too narrow for the row, so it falls back to a compact arrow
-          stepper. */}
+      {/* Left-side vertical navigation (desktop only). Icon + label per menu
+          item; the active view is gold with an underline. Maps to camera areas
+          via MENU_ITEMS. Mobile uses the bottom arrow stepper instead. */}
+      {!isMobile && (
+        <nav
+          style={{
+            position: "absolute",
+            left: "34px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 1000,
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+            opacity: introPhase === "ready" && !freeMode ? 1 : 0,
+            pointerEvents:
+              introPhase === "ready" && !freeMode ? "auto" : "none",
+            transition: "opacity 500ms ease-in",
+          }}
+        >
+          {MENU_ITEMS.map((item) => {
+            const index = areas.findIndex((a) => a.name === item.areaName);
+            const isActive = currentArea === index;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => moveToArea(index)}
+                disabled={isTransitioning}
+                style={{
+                  all: "unset",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "16px",
+                  padding: "9px 2px",
+                  width: "fit-content",
+                  cursor: isTransitioning ? "default" : "pointer",
+                  color: isActive ? NAV_GOLD : NAV_IDLE,
+                  borderBottom: isActive
+                    ? `1.5px solid ${NAV_GOLD}`
+                    : "1.5px solid transparent",
+                  transition: "color 200ms",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.color = "#e8ebef";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.color = NAV_IDLE;
+                }}
+              >
+                <NavIcon name={item.icon} />
+                <span
+                  style={{
+                    fontSize: "15px",
+                    letterSpacing: "0.22em",
+                    fontWeight: 600,
+                  }}
+                >
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
+      {/* Bottom navigation — mobile only now (desktop uses the left menu).
+          A compact arrow stepper that cycles through the camera areas. */}
       {(() => {
         const containerStyle: CSSProperties = {
           position: "absolute",
@@ -1112,58 +1395,9 @@ export default function ModelViewer() {
           );
         }
 
-        const baseStyle: CSSProperties = {
-          all: "unset",
-          color: "white",
-          fontSize: "12px",
-          letterSpacing: "0.15em",
-          fontWeight: 500,
-          padding: "11px 16px",
-          borderRadius: "20px",
-          backdropFilter: "blur(10px)",
-          cursor: isTransitioning ? "default" : "pointer",
-          opacity: isTransitioning ? 0.5 : 1,
-          boxSizing: "border-box",
-          transition: "background 200ms, border 200ms, opacity 200ms",
-        };
-        const activeBg = "rgba(255, 255, 255, 0.16)";
-        const idleBg = "rgba(0, 0, 0, 0.5)";
-
-        return (
-          <div style={containerStyle}>
-            {areas.map((area, index) => {
-              const isActive = currentArea === index;
-              const isLaptop = area.name === AREAS.PORTFOLIO.name;
-              return (
-                <button
-                  key={area.name}
-                  type="button"
-                  onClick={() => moveToArea(index)}
-                  disabled={isTransitioning}
-                  style={{
-                    ...baseStyle,
-                    background: isActive ? activeBg : idleBg,
-                    border: isActive
-                      ? "1px solid rgba(255, 255, 255, 0.45)"
-                      : "1px solid rgba(255, 255, 255, 0.15)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isTransitioning && !isActive)
-                      e.currentTarget.style.background =
-                        "rgba(255,255,255,0.14)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isActive
-                      ? activeBg
-                      : idleBg;
-                  }}
-                >
-                  {isLaptop ? "LAPTOP" : area.name.toUpperCase()}
-                </button>
-              );
-            })}
-          </div>
-        );
+        // Desktop navigation is the left-side vertical menu above; no bottom
+        // row there.
+        return null;
       })()}
     </div>
   );

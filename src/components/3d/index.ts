@@ -4,6 +4,5 @@ export { LaptopScreen } from "./LaptopScreen";
 export type { LaptopScreenHandle } from "./LaptopScreen";
 export { Model } from "./Model";
 export { Nebula } from "./Nebula";
-export { Planet } from "./Planet";
 export { SpeakerAudio } from "./SpeakerAudio";
 export { Window } from "./Window";

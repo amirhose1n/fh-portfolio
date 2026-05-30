@@ -45,8 +45,6 @@ export const SCENE_CONFIG = {
     FOV: 60,
     BACKGROUND_COLOR: "#070710",
   },
-  // Procedural nebula sky — a large inverted sphere behind the Stars. Colors,
-  // density and drift are all tunable here; no texture asset involved.
   NEBULA: {
     RADIUS: 120, // must enclose the Stars cloud (drei Stars radius+depth)
     BASE_COLOR: "#070710", // deep-space fill, matches CAMERA.BACKGROUND_COLOR
@@ -54,34 +52,59 @@ export const SCENE_CONFIG = {
     COLOR_B: "#1f6f8c", // teal cloud — the dominant tint
     COLOR_C: "#5a2f6b", // faint purple, only in the very densest pockets
     SCALE: 4.0, // noise frequency — higher = smaller wisps (direction-sampled,
-    //               so this needs to be several units to show structure)
     INTENSITY: 0.35, // 0..1 cloud strength over the base color — keep it barely
-    //                  visible so the stars stay the focus
     SPEED: 0.01, // drift speed — keep tiny so it's barely perceptible
   },
   LIGHTING: {
     CEILING_LAMP: {
-      POSITION: [0, ROOM_CEILING_Y - 0.25, 0] as [number, number, number],
+      POSITION: [0, ROOM_CEILING_Y - 0.13, 0] as [number, number, number],
       INTENSITY: 6,
-      COLOR: "#FFF8DC",
-      DECAY: 2,
-      DISTANCE: 10,
+      COLOR: "#ffd7a8",
+      DECAY: 1,
+      DISTANCE: 6,
       SHADOW_MAP_SIZE: 2048,
     },
+    CENTER_LIGHT: {
+      POSITION: [0, ROOM_CENTER_Y, 0] as [number, number, number],
+      COLOR: "#8a7f1f",
+      INTENSITY: 2,
+      DECAY: 1.5,
+      DISTANCE: 10,
+    },
     MOONLIGHT: {
-      // Cool moonlight above the rooftop — lights exterior shell + Starlink
-      POSITION: [2, ROOM_CEILING_Y + 2, 2] as [number, number, number],
-      TARGET: [1.5, ROOM_CEILING_Y, 1.5] as [number, number, number],
-      INTENSITY: 3,
+      POSITION: [-4, ROOM_CEILING_Y + 3, 0] as [number, number, number],
+      TARGET: [0, ROOM_CENTER_Y, 0] as [number, number, number],
+      INTENSITY: 4,
       COLOR: "#b8c8e0",
+      SHADOW_MAP_SIZE: 2048,
+      SHADOW_BOUNDS: 3.5, // ortho half-extent — must enclose the whole cube
+      SHADOW_NEAR: 0.5,
+      SHADOW_FAR: 15,
+    },
+    // Cool rim/back light for the pet cat — sits behind + above it and aims
+    // down at it, so it only kisses the cat's back, ears and tail with a bright
+    // moonlit edge that separates the silhouette from the dark corner (most
+    // visible when orbiting around the cat's back). Tight DISTANCE + decay keep
+    // the spill off the rest of the room; narrow ANGLE keeps it on the cat.
+    PET_RIM: {
+      POSITION: [-0.55, 0.2, -0.4] as [number, number, number],
+      TARGET: [-0.65, 0.1, 0.5] as [number, number, number],
+      INTENSITY: 4,
+      COLOR: "#cdd8ec",
+      ANGLE: Math.PI,
+      PENUMBRA: 0.9,
+      DECAY: 2,
+      DISTANCE: 2.6,
     },
   },
   AREAS: {
     OVERVIEW: {
       name: "Overview",
-      position: [0, 2.2, -2] as [number, number, number],
-      target: [0, 0, 0] as [number, number, number],
+      position: [-2.42, 0.53, -4.34] as [number, number, number],
+      target: [0, 0.3, 0] as [number, number, number],
       componentPosition: [1, ROOM_FLOOR_Y, -1] as [number, number, number],
+      minPolarAngle: 0,
+      maxPolarAngle: Math.PI,
     },
     GALLERY: {
       name: "Gallery",
@@ -141,21 +164,23 @@ export const SCENE_CONFIG = {
   // Monitor model placement (within portfolio group)
   MONITOR: {
     POSITION: [0, 1.3, -0.1] as [number, number, number],
-    SCALE: [1, 0.85, 1] as [number, number, number],
+    // Uniform scale — the old [1,0.85,1] y-squash was tuned to the macbook and
+    // would distort the new Models-v2 laptop.
+    SCALE: [1, 1, 1] as [number, number, number],
     ROTATION: [-0.05, 0, 0] as [number, number, number],
   },
   LAPTOP_SCREEN: {
-    POSITION: [-0.056, -0.38, -0.178] as [number, number, number],
-    ROTATION: [-0.26, 0.29, 0.08] as [number, number, number],
-    WIDTH: 0.51,
-    HEIGHT: 0.31,
+    POSITION: [-0.05, -0.235, -0.16] as [number, number, number],
+    ROTATION: [-0.15, 0.3, 0.05] as [number, number, number],
+    WIDTH: 0.48,
+    HEIGHT: 0.3,
     PIXEL_WIDTH: 1280,
     PIXEL_HEIGHT: 800,
     ZOOM_DISTANCE: 0.42,
     HOVER_FRACTION: 0.22,
     HOVER_DURATION: 380,
     ZOOM_DURATION: 700,
-    DEBUG_VISIBLE_BACKPLATE: false,
+    DEBUG_VISIBLE_BACKPLATE: true,
     DEBUG_BACKPLATE_COLOR: "#ff00aa",
   },
 
@@ -211,38 +236,43 @@ export const SCENE_CONFIG = {
       SCALE: [1, 1, 1] as [number, number, number],
     },
     FLOWERS: {
-      // NOTE: this GLB is the ceramic pot only (no plant foliage).
-      URL: "/Models/Flowers/Ceramic_pot_model.glb",
-      // Floor corner by the gallery wall. POSITION/SCALE are starting guesses.
-      POSITION: [-1.25, ROOM_FLOOR_Y, -1.25] as [number, number, number],
+      URL: "/Models-v2/FlowerPot/flower-pot.glb",
+      POSITION: [1.2, -1, 1.1] as [number, number, number],
       ROTATION: [0, Math.PI / 4, 0] as [number, number, number],
-      SCALE: 1,
+      SCALE: [4.5, 10, 4.5] as [number, number, number],
+      ROTATION: [0, 1.5, 0] as [number, number, number],
     },
     COMPUTER: {
-      URL: "/Models/Computer/macbook.glb",
-      POSITION: [0, -0.555, 0] as [number, number, number],
+      // Models-v2 laptop. Center-pivot, native ~1.9×1.34×1.48 — scaled to a
+      // ~0.53-wide laptop and lifted by half its height so the base rests on
+      // the desk. NOTE: the interactive OS screen overlay (LAPTOP_SCREEN) was
+      // tuned to the old macbook lid and needs re-calibrating to this model.
+      URL: "/Models-v2/Laptop/laptop.glb",
+      POSITION: [0, -0.256, 0] as [number, number, number],
       ROTATION: [0, 0.3, 0] as [number, number, number],
-      // FBX exports default to cm — 0.01 brings it into the room's metre-scale.
-      SCALE: 0.12,
+      SCALE: 0.28,
     },
     DESK: {
-      URL: "/Models/Desk/computer_desk.glb",
-      POSITION: [0.3, 0, 0] as [number, number, number],
-      SCALE: [1.1, 1.1, 1.1] as [number, number, number],
+      // Models-v2 desk. Center-pivot, native ~1.9×0.86×0.85 — POSITION.y lifts
+      // the base onto the floor.
+      URL: "/Models-v2/Desk/desk.glb",
+      POSITION: [0.3, 0.43, 0] as [number, number, number],
+      SCALE: [1, 1, 1] as [number, number, number],
     },
     CHAIR: {
-      URL: "/Models/Chair/chair.fbx",
-      // Sits in front of the desk on the viewer side of the portfolio group.
-      POSITION: [0.6, 0, 0.55] as [number, number, number],
-      ROTATION: [0, Math.PI - 1, 0] as [number, number, number],
-      SCALE: 0.04,
+      // Models-v2 chair. Center-pivot, native ~1.9 tall — scaled to ~1.04 to
+      // match the old chair, POSITION.y lifts the base onto the floor.
+      URL: "/Models-v2/Chair/chair.glb",
+      POSITION: [0.6, 0.52, 0.55] as [number, number, number],
+      ROTATION: [0, Math.PI + 0.5, 0] as [number, number, number],
+      SCALE: 0.55,
     },
     SPEAKER: {
-      URL: "/Models/Speaker/speaker.fbx",
-      // Sits on the desktop, to the side of the monitor.
-      POSITION: [-0.5, 0.81, -0.1] as [number, number, number],
+      // Models-v2 speaker. Base-pivot, native ~0.32 tall — sits on the desk top.
+      URL: "/Models-v2/Speaker/speaker.glb",
+      POSITION: [-0.5, 0.86, -0.1] as [number, number, number],
       ROTATION: [0, 0.4, 0] as [number, number, number],
-      SCALE: 0.0005,
+      SCALE: 0.6,
       AUDIO: {
         URL: "/musics/interstllar.mp3",
         // Inverse distance model — full volume near desk, falls off in other areas.
@@ -250,20 +280,18 @@ export const SCENE_CONFIG = {
         VOLUME: 1.0,
       },
     },
+    PET: {
+      URL: "/Models/Pet/topol-idle/cat-idle.glb",
+      POSITION: [-0.55, ROOM_FLOOR_Y + 1.07, 1] as [number, number, number],
+      ROTATION: [0, Math.PI / 1.1, 0] as [number, number, number],
+      SCALE: [0.008, 0.008, 0.008] as [number, number, number],
+    },
     STARLINK: {
       URL: "/Models/Starlink/starlink.glb",
       // Centered on the exterior roof (base sits just above the ceiling plane)
       POSITION: [1, ROOM_CEILING_Y + 0.12, -1] as [number, number, number],
       ROTATION: [0, Math.PI / 1.2, 0] as [number, number, number],
       SCALE: [0.003, 0.003, 0.003] as [number, number, number],
-    },
-    PLANET: {
-      URL: "/Models/Plaent/atumn.fbx",
-      POSITION: [400, 1.5, 0] as [number, number, number],
-      ROTATION: [0.4, 0, 0.1] as [number, number, number],
-      DIAMETER: 5,
-      SPIN_SPEED: 0.05, // radians/sec — slow drift (~125s per revolution)
-      scale: 3,
     },
   },
 
@@ -279,5 +307,8 @@ export const SCENE_CONFIG = {
     ENABLED: false,
     BOX_SIZE: 0.2,
     TARGET_BOX_SIZE: 0.1,
+    // Set to false to hide the room walls, ceiling, and exterior shell (the
+    // floor stays) — handy for inspecting the interior and model placement.
+    SHOW_WALLS: true,
   },
 } as const;

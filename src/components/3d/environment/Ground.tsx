@@ -1,5 +1,5 @@
 import { useLoader } from "@react-three/fiber";
-import { forwardRef, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { SCENE_CONFIG } from "../../../constants/scene";
 
@@ -37,6 +37,7 @@ function makeHoledWall(
 const { SIZE, HALF, FLOOR_Y, CEILING_Y, CENTER_Y, WALL_INSET, WALL_THICKNESS } =
   SCENE_CONFIG.ROOM;
 const WINDOW = SCENE_CONFIG.WINDOW;
+const { SHOW_WALLS } = SCENE_CONFIG.DEBUG;
 
 // Forwarded ref points at the top-level group that owns every wall, floor,
 // and ceiling mesh. <Html occlude={[ref]}> raycasts recursively against this
@@ -44,6 +45,24 @@ const WINDOW = SCENE_CONFIG.WINDOW;
 // screen — without false-positives from the macbook lid (not under here).
 export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
   const groundRef = useRef<THREE.Mesh>(null);
+  const rootRef = useRef<THREE.Group | null>(null);
+
+  // Merge the forwarded ref with a local one so we can traverse the shell.
+  const setRootRef = (g: THREE.Group | null) => {
+    rootRef.current = g;
+    if (typeof ref === "function") ref(g);
+    else if (ref) ref.current = g;
+  };
+
+  // Every shell mesh casts shadows so the exterior moonlight is physically
+  // occluded from the interior (the walls/ceiling block it like real walls),
+  // and the lamp's shadows land on the walls. receiveShadow is left as authored
+  // per mesh.
+  useEffect(() => {
+    rootRef.current?.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) obj.castShadow = true;
+    });
+  }, []);
 
   // Black painted MDF planks — diffuse-only (no normal / metalness /
   // roughness maps), so metalness/roughness are constants on the material.
@@ -53,14 +72,8 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
   );
   floorMap.colorSpace = THREE.SRGBColorSpace;
 
-  // Interior wall textures (unchanged from original)
-  const [wallMap, wallNormalMap, wallMetalnessMap, wallRoughnessMap] =
-    useLoader(THREE.TextureLoader, [
-      "/textures/wall/Poliigon_PlasticMoldWorn_7486_BaseColor.jpg",
-      "/textures/wall/Poliigon_PlasticMoldWorn_7486_Normal.png",
-      "/textures/wall/Poliigon_PlasticMoldWorn_7486_Metallic.jpg",
-      "/textures/wall/Poliigon_PlasticMoldWorn_7486_Roughness.jpg",
-    ]);
+  // Interior walls are a flat warm-grey colour now (see innerMatProps) — no
+  // texture maps, matching the smooth plaster look of the design reference.
 
   // Exterior wall texture (wallOutside). Only color + normal from the
   // DirtWindowStains005 set are wired; gloss/refl maps are skipped.
@@ -77,15 +90,6 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
   // stay sharp into the distance. 16 is the GPU max on basically anything
   // modern; three.js clamps automatically on weaker hardware.
   floorMap.anisotropy = 16;
-
-  // Configure wall texture properties
-  [wallMap, wallNormalMap, wallMetalnessMap, wallRoughnessMap].forEach(
-    (texture) => {
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(2, 2);
-    },
-  );
 
   // Configure outer wall texture properties
   [outerMap, outerNormalMap].forEach((texture) => {
@@ -114,11 +118,10 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
     [cubeSize],
   );
 
+  // Smooth matte warm-grey plaster to match the reference interior. No maps —
+  // the only variation comes from the warm lighting gradient across the walls.
   const innerMatProps = {
-    map: wallMap,
-    normalMap: wallNormalMap,
-    metalnessMap: wallMetalnessMap,
-    roughnessMap: wallRoughnessMap,
+    color: "#857b70",
     metalness: 0,
     roughness: 1,
   };
@@ -142,7 +145,7 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
   const setLayer1 = (self: THREE.Object3D) => self.layers.set(1);
 
   return (
-    <group ref={ref}>
+    <group ref={setRootRef}>
       {/* ── INTERIOR (layer 0, unchanged textures) ───────────────── */}
 
       {/* Black painted MDF plank floor (interior, visible from above) */}
@@ -160,6 +163,11 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
         />
       </mesh>
 
+      {/* Walls, ceiling, and exterior shell — hidden when DEBUG.SHOW_WALLS is
+          false so the interior / model placement can be inspected. The floor
+          above always stays visible. */}
+      {SHOW_WALLS && (
+        <>
       {/* Back wall (interior) */}
       <mesh position={[0, CENTER_Y, -wallInset]} receiveShadow>
         <planeGeometry args={[SIZE, SIZE]} />
@@ -398,6 +406,8 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
           </>
         );
       })()}
+        </>
+      )}
     </group>
   );
 });

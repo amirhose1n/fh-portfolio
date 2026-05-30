@@ -16,7 +16,8 @@
       "Bash(echo \"exit: $?\")",
       "Bash(xxd)",
       "Bash(python3 -)",
-      "Bash(node -)"
+      "Bash(node -)",
+      "Bash(rtk ls *)"
     ],
     "additionalDirectories": [
       "j:\\projects\\fh-portfolio\\fh-portfolio-inner\\src\\laptop-os",
