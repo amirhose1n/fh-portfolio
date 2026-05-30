@@ -58,18 +58,24 @@ export const SCENE_CONFIG = {
   LIGHTING: {
     CEILING_LAMP: {
       POSITION: [0, ROOM_CEILING_Y - 0.13, 0] as [number, number, number],
-      INTENSITY: 6,
-      COLOR: "#ffd7a8",
-      DECAY: 1,
+      INTENSITY: 5.5,
+      // Warm cream — the lamp's own glow. Slightly stronger DECAY than before
+      // so the warm pool concentrates under the fixture and the corners fall
+      // into shadow, matching the design's amber-with-dark-corners falloff.
+      COLOR: "#ffd6a5",
+      DECAY: 1.4,
       DISTANCE: 6,
       SHADOW_MAP_SIZE: 2048,
     },
     CENTER_LIGHT: {
       POSITION: [0, ROOM_CENTER_Y, 0] as [number, number, number],
-      COLOR: "#8a7f1f",
-      INTENSITY: 2,
-      DECAY: 1.5,
-      DISTANCE: 10,
+      // Warm amber fill (was a pale yellow-green that cooled the walls toward
+      // white). Dimmer + faster falloff so it gently lifts the middle without
+      // washing the walls out — the room keeps the design's warm taupe tone.
+      COLOR: "#ffb878",
+      INTENSITY: 1.2,
+      DECAY: 1.9,
+      DISTANCE: 8,
     },
     MOONLIGHT: {
       POSITION: [-4, ROOM_CEILING_Y + 3, 0] as [number, number, number],
@@ -100,7 +106,7 @@ export const SCENE_CONFIG = {
   AREAS: {
     OVERVIEW: {
       name: "Overview",
-      position: [-2.42, 0.53, -4.34] as [number, number, number],
+      position: [-2.42, 1, -4.34] as [number, number, number],
       target: [0, 0.3, 0] as [number, number, number],
       componentPosition: [1, ROOM_FLOOR_Y, -1] as [number, number, number],
       minPolarAngle: 0,
@@ -147,6 +153,15 @@ export const SCENE_CONFIG = {
       minPolarAngle: 0,
       maxPolarAngle: Math.PI,
     },
+  },
+
+  // Thin trim lines hugging the top (crown) and bottom (baseboard) edge of
+  // every interior wall — the slightly-lit-black accent lines from the design
+  // reference. They protrude a hair into the room so the lamp catches them.
+  WALL_TRIM: {
+    COLOR: "#1c1c20", // near-black, a touch lighter than the slab bands (#0a0a0c)
+    HEIGHT: 0.05, // vertical thickness of each line
+    PROTRUSION: 0.015, // how far it sticks out from the wall into the room
   },
 
   // Round "spaceship porthole" window on the right wall (opposite the gallery).

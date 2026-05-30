@@ -248,12 +248,12 @@ const areas: Area[] = [
 // Left-side desktop navigation. Each label flies the camera to one of the
 // existing areas — edit the `areaName` here to remap a menu item to a
 // different view.
-type MenuIconName = "home" | "about" | "skills" | "projects" | "contact";
+type MenuIconName = "home" | "about" | "gallery" | "projects" | "contact";
 
 const MENU_ITEMS: { label: string; areaName: string; icon: MenuIconName }[] = [
   { label: "HOME", areaName: AREAS.OVERVIEW.name, icon: "home" },
   { label: "ABOUT", areaName: AREAS.AVATAR.name, icon: "about" },
-  { label: "SKILLS", areaName: AREAS.GALLERY.name, icon: "skills" },
+  { label: "GALLERY", areaName: AREAS.GALLERY.name, icon: "gallery" },
   { label: "PROJECTS", areaName: AREAS.PORTFOLIO.name, icon: "projects" },
   { label: "CONTACT", areaName: AREAS.WINDOW.name, icon: "contact" },
 ];
@@ -288,12 +288,12 @@ function NavIcon({ name }: { name: MenuIconName }) {
           <path d="M5.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
         </svg>
       );
-    case "skills":
+    case "gallery":
       return (
         <svg {...common}>
-          <polyline points="8 8 4 12 8 16" />
-          <polyline points="16 8 20 12 16 16" />
-          <line x1="13.5" y1="5.5" x2="10.5" y2="18.5" />
+          <rect x="3" y="4.5" width="18" height="15" rx="1.5" />
+          <circle cx="8.5" cy="9.5" r="1.6" />
+          <path d="m4 17 5-4.5 4 3.5 3-2.5 5 4" />
         </svg>
       );
     case "projects":
@@ -885,7 +885,7 @@ export default function ModelViewer() {
           <Suspense fallback={null}>
             <SceneReadySignal onReady={() => setSceneReady(true)} />
             <Ground />
-            <Window />
+            <Window isActive={areas[currentArea]?.name === AREAS.WINDOW.name} />
             <Gallery
               ref={galleryRef}
               isActive={areas[currentArea]?.name === AREAS.GALLERY.name}
@@ -956,11 +956,11 @@ export default function ModelViewer() {
             )}
 
             {/* FH Model */}
-            {/* <Model
+            <Model
               url={MODELS.FH.URL}
               position={AREAS.OVERVIEW.componentPosition}
               rotation={MODELS.FH.ROTATION}
-            /> */}
+            />
 
             {/* Skateboard Model */}
             <Model

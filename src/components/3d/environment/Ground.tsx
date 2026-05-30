@@ -233,6 +233,39 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
         <meshStandardMaterial {...innerMatProps} />
       </mesh>
 
+      {/* ── Wall trim lines ──────────────────────────────────────
+          Thin slightly-lit-black strips hugging the bottom (baseboard) and
+          top (crown) edge of every interior wall — the dark accent lines from
+          the design reference. Each strip protrudes a hair into the room so
+          the ceiling lamp catches it as a crisp horizontal line framing the
+          walls. Built as 8 boxes: 4 walls × 2 edges. The right wall's window
+          sits at CENTER_Y (well clear of both edges), so the lines run full
+          width without intersecting the porthole. */}
+      {(() => {
+        const { COLOR, HEIGHT: th, PROTRUSION: pr } = SCENE_CONFIG.WALL_TRIM;
+        const inner = wallInset; // interior wall face (±1.49)
+        const strips: {
+          pos: [number, number, number];
+          args: [number, number, number];
+        }[] = [];
+        // Baseboard sits on the floor, crown tucks under the ceiling.
+        for (const y of [FLOOR_Y + th / 2, CEILING_Y - th / 2]) {
+          // Back & front walls run along X; left & right run along Z. Each box
+          // is offset by pr/2 so its back face is flush with the wall and it
+          // protrudes `pr` into the room.
+          strips.push({ pos: [0, y, -inner + pr / 2], args: [SIZE, th, pr] });
+          strips.push({ pos: [0, y, inner - pr / 2], args: [SIZE, th, pr] });
+          strips.push({ pos: [-inner + pr / 2, y, 0], args: [pr, th, SIZE] });
+          strips.push({ pos: [inner - pr / 2, y, 0], args: [pr, th, SIZE] });
+        }
+        return strips.map((s, i) => (
+          <mesh key={i} position={s.pos} receiveShadow>
+            <boxGeometry args={s.args} />
+            <meshStandardMaterial color={COLOR} roughness={1} metalness={0} />
+          </mesh>
+        ));
+      })()}
+
       {/* ── EXTERIOR (layer 1) ───────────────────────────────────
           Cube exterior split into three vertical bands:
           1. Floor slab side band (cubeY0 → FLOOR_Y) — thickness strip
@@ -360,47 +393,52 @@ export const Ground = forwardRef<THREE.Group>(function Ground(_, ref) {
           slab depth around the central see-through area (which stays
           open from x=-wallInset to +wallInset, y=FLOOR_Y to CEILING_Y). */}
       {(() => {
-        const rot: [number, number, number] = [0, Math.PI, 0];
-        // Top frame — roof slab back edge
+        // Solid slab boxes around the open back. These used to be flat planes
+        // at z=-ext (capping only the BACK face of the slab), which left the
+        // slab DEPTH uncapped — at grazing angles (the bottom and left edges
+        // especially) the sightline slipped past the interior wall edge to the
+        // background behind the cube, showing as a bright sliver between the
+        // wall and the black frame. Giving each frame piece real depth (a box
+        // spanning the full wall thickness) makes the opening a solid dark
+        // reveal that can't leak from any viewing angle.
+        const zc = -(wallInset + ext) / 2; // mid-depth of the slab
+        const depth = revealSpan; // wall thickness (incl. inset)
         return (
           <>
+            {/* Top — roof slab */}
             <mesh
-              position={[0, (CEILING_Y + cubeY1) / 2, -ext]}
-              rotation={rot}
+              position={[0, (CEILING_Y + cubeY1) / 2, zc]}
               receiveShadow
               onUpdate={setLayer1}
             >
-              <planeGeometry args={[cubeSize, t]} />
+              <boxGeometry args={[cubeSize, t, depth]} />
               <meshStandardMaterial {...thicknessMatProps} />
             </mesh>
-            {/* Bottom frame — floor slab back edge */}
+            {/* Bottom — floor slab */}
             <mesh
-              position={[0, (cubeY0 + FLOOR_Y) / 2, -ext]}
-              rotation={rot}
+              position={[0, (cubeY0 + FLOOR_Y) / 2, zc]}
               receiveShadow
               onUpdate={setLayer1}
             >
-              <planeGeometry args={[cubeSize, t]} />
+              <boxGeometry args={[cubeSize, t, depth]} />
               <meshStandardMaterial {...thicknessMatProps} />
             </mesh>
-            {/* Left frame — left wall slab back edge */}
+            {/* Left — left wall slab */}
             <mesh
-              position={[-(ext + wallInset) / 2, CENTER_Y, -ext]}
-              rotation={rot}
+              position={[-(ext + wallInset) / 2, CENTER_Y, zc]}
               receiveShadow
               onUpdate={setLayer1}
             >
-              <planeGeometry args={[revealSpan, SIZE]} />
+              <boxGeometry args={[revealSpan, SIZE, depth]} />
               <meshStandardMaterial {...thicknessMatProps} />
             </mesh>
-            {/* Right frame — right wall slab back edge */}
+            {/* Right — right wall slab */}
             <mesh
-              position={[(ext + wallInset) / 2, CENTER_Y, -ext]}
-              rotation={rot}
+              position={[(ext + wallInset) / 2, CENTER_Y, zc]}
               receiveShadow
               onUpdate={setLayer1}
             >
-              <planeGeometry args={[revealSpan, SIZE]} />
+              <boxGeometry args={[revealSpan, SIZE, depth]} />
               <meshStandardMaterial {...thicknessMatProps} />
             </mesh>
           </>
