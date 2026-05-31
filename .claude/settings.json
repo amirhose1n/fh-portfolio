@@ -17,7 +17,14 @@
       "Bash(xxd)",
       "Bash(python3 -)",
       "Bash(node -)",
-      "Bash(rtk ls *)"
+      "Bash(rtk ls *)",
+      "Bash(exit 1)",
+      "Bash(rm -rf \"Models/Chair\" \"Models/Speaker\" \"Models/Desk\" \"Models/Computer\" \"Models/OfficeDesk\" \"Models/Plaent\" \"Models/Pet/topol#0004_idle\")",
+      "Bash(mv Models-v2/__TRACKED_VAR__ Models/__TRACKED_VAR__)",
+      "Bash(rm -f \"Models/FlowerPot/flowerd-pot.glb\")",
+      "Bash(rm -rf \"Models-v2\")",
+      "Bash(node -e ' *)",
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 30; \"exit: $LASTEXITCODE\")"
     ],
     "additionalDirectories": [
       "j:\\projects\\fh-portfolio\\fh-portfolio-inner\\src\\laptop-os",

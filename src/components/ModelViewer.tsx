@@ -955,11 +955,12 @@ export default function ModelViewer() {
               </>
             )}
 
-            {/* FH Model */}
+            {/* FH Model — animated character with a baked idle loop */}
             <Model
               url={MODELS.FH.URL}
-              position={AREAS.OVERVIEW.componentPosition}
+              position={MODELS.FH.POSITION}
               rotation={MODELS.FH.ROTATION}
+              scale={MODELS.FH.SCALE}
             />
 
             {/* Skateboard Model */}
@@ -986,11 +987,6 @@ export default function ModelViewer() {
               rotation={MODELS.PET.ROTATION}
               scale={MODELS.PET.SCALE}
             />
-
-            {/* Cool rim/back light for the cat — traces a moonlit edge along
-                its back so it pops off the dark corner, especially from behind.
-                Tight cone + short distance keep the spill off the rest of the
-                room. Target via attach="target" so its matrixWorld updates. */}
             <spotLight
               position={LIGHTING.PET_RIM.POSITION}
               intensity={LIGHTING.PET_RIM.INTENSITY}
@@ -1005,9 +1001,6 @@ export default function ModelViewer() {
 
             {DEBUG.ENABLED && (
               <>
-                {/* Solid cube at the pet rim light source — tweak
-                    LIGHTING.PET_RIM.POSITION in scene.ts to move it, this marker
-                    follows. Wire cube marks where the rim is aimed (TARGET). */}
                 <mesh position={LIGHTING.PET_RIM.POSITION}>
                   <boxGeometry args={[0.12, 0.12, 0.12]} />
                   <meshBasicMaterial color="lime" />
@@ -1019,25 +1012,10 @@ export default function ModelViewer() {
               </>
             )}
 
-            {/* Starlink dish on the roof — exclusive to layer 1 (moonlight
-                only). No shadows: it's outside and must not throw or catch any
-                shadow from the interior lamp. */}
-            <Model
-              url={MODELS.STARLINK.URL}
-              position={MODELS.STARLINK.POSITION}
-              rotation={MODELS.STARLINK.ROTATION}
-              scale={MODELS.STARLINK.SCALE}
-              layer={1}
-              castShadow={false}
-              receiveShadow={false}
-            />
-
-            {/* Portfolio Area - Computer Setup */}
             <group
               position={AREAS.PORTFOLIO.componentPosition}
               rotation={[0, Math.PI, 0]}
             >
-              {/* Monitor / Computer (FBX) */}
               <group
                 position={MONITOR.POSITION}
                 scale={MONITOR.SCALE}
@@ -1050,7 +1028,6 @@ export default function ModelViewer() {
                   scale={MODELS.COMPUTER.SCALE}
                 />
 
-                {/* Interactive DOM "screen" overlaid on the macbook display. */}
                 <LaptopScreen
                   ref={laptopScreenRef}
                   isActive={laptopActive}
@@ -1091,6 +1068,67 @@ export default function ModelViewer() {
                   volume={MODELS.SPEAKER.AUDIO.VOLUME}
                 />
               </group>
+
+              {/* Floating wall shelf above the desk (decor) */}
+              <Model
+                url={MODELS.WALL_SHELF.URL}
+                position={MODELS.WALL_SHELF.POSITION}
+                rotation={MODELS.WALL_SHELF.ROTATION}
+                scale={MODELS.WALL_SHELF.SCALE}
+              />
+
+              {/* Reading lamp on the desk */}
+              <Model
+                url={MODELS.READING_LAMP.URL}
+                position={MODELS.READING_LAMP.POSITION}
+                rotation={MODELS.READING_LAMP.ROTATION}
+                scale={MODELS.READING_LAMP.SCALE}
+              />
+
+              {/* Warm task light from the reading lamp's head, pooling on the
+                  desk toward the laptop. Local to this group, so it shares the
+                  lamp's coordinate frame. Target via attach="target" so its
+                  matrixWorld tracks the group transform. */}
+              <spotLight
+                position={LIGHTING.READING_LAMP.POSITION}
+                intensity={LIGHTING.READING_LAMP.INTENSITY}
+                color={LIGHTING.READING_LAMP.COLOR}
+                angle={LIGHTING.READING_LAMP.ANGLE}
+                penumbra={LIGHTING.READING_LAMP.PENUMBRA}
+                decay={LIGHTING.READING_LAMP.DECAY}
+                distance={LIGHTING.READING_LAMP.DISTANCE}
+                castShadow
+                shadow-mapSize-width={LIGHTING.READING_LAMP.SHADOW_MAP_SIZE}
+                shadow-mapSize-height={LIGHTING.READING_LAMP.SHADOW_MAP_SIZE}
+              >
+                <object3D
+                  attach="target"
+                  position={LIGHTING.READING_LAMP.TARGET}
+                />
+              </spotLight>
+
+              {/* Small warm bulb glow so the lamp shade itself reads as lit
+                  (the spotlight is directional and wouldn't light the head). */}
+              <pointLight
+                position={LIGHTING.READING_LAMP.POSITION}
+                color={LIGHTING.READING_LAMP.COLOR}
+                intensity={1}
+                decay={2}
+                distance={0.1}
+              />
+
+              {DEBUG.ENABLED && (
+                <>
+                  <mesh position={LIGHTING.READING_LAMP.POSITION}>
+                    <boxGeometry args={[0.06, 0.06, 0.06]} />
+                    <meshBasicMaterial color="orange" />
+                  </mesh>
+                  <mesh position={LIGHTING.READING_LAMP.TARGET}>
+                    <boxGeometry args={[0.05, 0.05, 0.05]} />
+                    <meshBasicMaterial color="yellow" wireframe />
+                  </mesh>
+                </>
+              )}
             </group>
           </Suspense>
 

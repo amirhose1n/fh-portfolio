@@ -87,11 +87,6 @@ export const SCENE_CONFIG = {
       SHADOW_NEAR: 0.5,
       SHADOW_FAR: 15,
     },
-    // Cool rim/back light for the pet cat — sits behind + above it and aims
-    // down at it, so it only kisses the cat's back, ears and tail with a bright
-    // moonlit edge that separates the silhouette from the dark corner (most
-    // visible when orbiting around the cat's back). Tight DISTANCE + decay keep
-    // the spill off the rest of the room; narrow ANGLE keeps it on the cat.
     PET_RIM: {
       POSITION: [-0.55, 0.2, -0.4] as [number, number, number],
       TARGET: [-0.65, 0.1, 0.5] as [number, number, number],
@@ -101,6 +96,17 @@ export const SCENE_CONFIG = {
       PENUMBRA: 0.9,
       DECAY: 2,
       DISTANCE: 2.6,
+    },
+    READING_LAMP: {
+      POSITION: [0.52, 1.1, -0.13] as [number, number, number],
+      TARGET: [0.5, 0.9, 0.05] as [number, number, number],
+      INTENSITY: 5,
+      COLOR: "#ffca7a",
+      ANGLE: Math.PI / 1.6,
+      PENUMBRA: 1,
+      DECAY: 1,
+      DISTANCE: 0.8,
+      SHADOW_MAP_SIZE: 2,
     },
   },
   AREAS: {
@@ -180,7 +186,7 @@ export const SCENE_CONFIG = {
   MONITOR: {
     POSITION: [0, 1.3, -0.1] as [number, number, number],
     // Uniform scale — the old [1,0.85,1] y-squash was tuned to the macbook and
-    // would distort the new Models-v2 laptop.
+    // would distort the new laptop.
     SCALE: [1, 1, 1] as [number, number, number],
     ROTATION: [-0.05, 0, 0] as [number, number, number],
   },
@@ -240,9 +246,14 @@ export const SCENE_CONFIG = {
   // Model positions
   MODELS: {
     FH: {
+      // Animated character (baked "idle" clip). Center-pivot, native
+      // ~66×74×15 — SCALE brings it to ~1.88 tall (matching the old model) and
+      // POSITION.y lifts it by half its scaled height so the feet rest on the
+      // floor (FLOOR_Y + 0.5*74*SCALE). Tune ROTATION to face the room.
       URL: "/Models/FH/Fh.glb",
-      POSITION: [1, ROOM_FLOOR_Y, -1] as [number, number, number],
-      ROTATION: [0, 0, 0] as [number, number, number],
+      POSITION: [1, -0.06, -1] as [number, number, number],
+      ROTATION: [0, -0.7, 0] as [number, number, number],
+      SCALE: 1,
     },
     SKATEBOARD: {
       URL: "/Models/Skateboard/Skateboard.glb",
@@ -251,41 +262,40 @@ export const SCENE_CONFIG = {
       SCALE: [1, 1, 1] as [number, number, number],
     },
     FLOWERS: {
-      URL: "/Models-v2/FlowerPot/flower-pot.glb",
-      POSITION: [1.2, -1, 1.1] as [number, number, number],
+      URL: "/Models/FlowerPot/flower-pot.glb",
+      POSITION: [1.2, 0, 1.1] as [number, number, number],
       ROTATION: [0, Math.PI / 4, 0] as [number, number, number],
-      SCALE: [4.5, 10, 4.5] as [number, number, number],
-      ROTATION: [0, 1.5, 0] as [number, number, number],
+      SCALE: [1, 1, 1] as [number, number, number],
     },
     COMPUTER: {
-      // Models-v2 laptop. Center-pivot, native ~1.9×1.34×1.48 — scaled to a
+      // Laptop. Center-pivot, native ~1.9×1.34×1.48 — scaled to a
       // ~0.53-wide laptop and lifted by half its height so the base rests on
       // the desk. NOTE: the interactive OS screen overlay (LAPTOP_SCREEN) was
       // tuned to the old macbook lid and needs re-calibrating to this model.
-      URL: "/Models-v2/Laptop/laptop.glb",
+      URL: "/Models/Laptop/laptop.glb",
       POSITION: [0, -0.256, 0] as [number, number, number],
       ROTATION: [0, 0.3, 0] as [number, number, number],
       SCALE: 0.28,
     },
     DESK: {
-      // Models-v2 desk. Center-pivot, native ~1.9×0.86×0.85 — POSITION.y lifts
+      // Desk. Center-pivot, native ~1.9×0.86×0.85 — POSITION.y lifts
       // the base onto the floor.
-      URL: "/Models-v2/Desk/desk.glb",
+      URL: "/Models/Desk/desk.glb",
       POSITION: [0.3, 0.43, 0] as [number, number, number],
       SCALE: [1, 1, 1] as [number, number, number],
     },
     CHAIR: {
-      // Models-v2 chair. Center-pivot, native ~1.9 tall — scaled to ~1.04 to
+      // Chair. Center-pivot, native ~1.9 tall — scaled to ~1.04 to
       // match the old chair, POSITION.y lifts the base onto the floor.
-      URL: "/Models-v2/Chair/chair.glb",
+      URL: "/Models/Chair/chair.glb",
       POSITION: [0.6, 0.52, 0.55] as [number, number, number],
       ROTATION: [0, Math.PI + 0.5, 0] as [number, number, number],
       SCALE: 0.55,
     },
     SPEAKER: {
-      // Models-v2 speaker. Base-pivot, native ~0.32 tall — sits on the desk top.
-      URL: "/Models-v2/Speaker/speaker.glb",
-      POSITION: [-0.5, 0.86, -0.1] as [number, number, number],
+      // Speaker. Base-pivot, native ~0.32 tall — sits on the desk top.
+      URL: "/Models/Speaker/speaker.glb",
+      POSITION: [-0.39, 0.86, -0.1] as [number, number, number],
       ROTATION: [0, 0.4, 0] as [number, number, number],
       SCALE: 0.6,
       AUDIO: {
@@ -295,18 +305,31 @@ export const SCENE_CONFIG = {
         VOLUME: 1.0,
       },
     },
+    // Floating wall shelf above the desk (books / camera / plant decor in the
+    // reference). Center-pivot, native ~1.9×0.81×0.56. Lives inside the
+    // PORTFOLIO group, so POSITION is local to that group (X→0.3 = room centre,
+    // Z negative = toward the wall the desk faces). Tune in free mode.
+    WALL_SHELF: {
+      URL: "/Models/WallShelf/WallShelf.glb",
+      POSITION: [0.3, 2, -0.35] as [number, number, number],
+      ROTATION: [0, 0, 0] as [number, number, number],
+      SCALE: 0.6,
+    },
+    // Articulated reading lamp on the desk (right side, by the laptop).
+    // Center-pivot, native ~0.67×1.9×1.24 with the base at native y=-0.95, so
+    // POSITION.y = deskTop(0.86) + 0.95*SCALE keeps the base on the desk.
+    // Local to the PORTFOLIO group. Tune ROTATION so the head faces the laptop.
+    READING_LAMP: {
+      URL: "/Models/ReadingLamp/ReadingLamp.glb",
+      POSITION: [0.55, 1.07, -0.2] as [number, number, number],
+      ROTATION: [0, -0.4, 0] as [number, number, number],
+      SCALE: 0.24,
+    },
     PET: {
       URL: "/Models/Pet/topol-idle/cat-idle.glb",
       POSITION: [-0.55, ROOM_FLOOR_Y + 1.07, 1] as [number, number, number],
       ROTATION: [0, Math.PI / 1.1, 0] as [number, number, number],
       SCALE: [0.008, 0.008, 0.008] as [number, number, number],
-    },
-    STARLINK: {
-      URL: "/Models/Starlink/starlink.glb",
-      // Centered on the exterior roof (base sits just above the ceiling plane)
-      POSITION: [1, ROOM_CEILING_Y + 0.12, -1] as [number, number, number],
-      ROTATION: [0, Math.PI / 1.2, 0] as [number, number, number],
-      SCALE: [0.003, 0.003, 0.003] as [number, number, number],
     },
   },
 
